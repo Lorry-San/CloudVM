@@ -49,8 +49,12 @@ Console endpoints:
 
 - `POST /api/v1/consoles/vnc/{vmid}`
 - `POST /api/v1/consoles/xterm/{vmid}`
+- `GET /console/vnc/{vmid}?token=<PLATFORM_API_TOKEN>`
 - `WS /ws/vnc/{vmid}`
 - `WS /ws/xterm/{vmid}`
+
+The browser VNC page uses noVNC and connects back through the platform
+WebSocket proxy. The PVE backend URL and VNC ticket stay server-side.
 
 ## Next implementation steps
 

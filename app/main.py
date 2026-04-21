@@ -1,7 +1,9 @@
-import re
 import ssl
+import html
+import re
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
 
@@ -53,6 +55,17 @@ def public_ws_url(settings: Settings, path: str) -> str:
     else:
         base = ""
     return f"{base}{path}"
+
+
+def require_console_token(token: str | None, settings: Settings) -> None:
+    if not token or token != settings.api_token:
+        raise HTTPException(status_code=401, detail="Invalid console token")
+
+
+def require_websocket_console_token(websocket: WebSocket, settings: Settings) -> None:
+    token = websocket.query_params.get("token")
+    if not token or token != settings.api_token:
+        raise RuntimeError("Invalid console token")
 
 
 @app.get("/health")
@@ -376,6 +389,98 @@ async def create_vnc_session(
     )
 
 
+@app.get("/console/vnc/{vmid}", response_class=HTMLResponse)
+async def vnc_console_page(
+    vmid: int,
+    token: str | None = None,
+    settings: Settings = Depends(get_settings),
+) -> HTMLResponse:
+    require_console_token(token, settings)
+    ws_scheme = "wss" if settings.public_base_url.startswith("https://") else "ws"
+    if settings.public_base_url:
+        base = settings.public_base_url.rstrip("/")
+        ws_url = f"{base.replace('https://', 'wss://').replace('http://', 'ws://')}/ws/vnc/{vmid}?token={token}"
+    else:
+        ws_url = f"{ws_scheme}://{html.escape('{host}')}/ws/vnc/{vmid}?token={token}"
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VM {vmid} VNC</title>
+  <style>
+    html, body {{
+      height: 100%;
+      margin: 0;
+      background: #111827;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    #bar {{
+      height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px;
+      background: #0f172a;
+      border-bottom: 1px solid #334155;
+      box-sizing: border-box;
+    }}
+    #screen {{
+      height: calc(100% - 40px);
+      width: 100%;
+      overflow: hidden;
+      background: #000;
+    }}
+    button {{
+      background: #2563eb;
+      color: white;
+      border: 0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }}
+    #status {{
+      color: #cbd5e1;
+      font-size: 13px;
+    }}
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <strong>VM {vmid}</strong>
+    <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
+    <span id="status">connecting</span>
+  </div>
+  <div id="screen"></div>
+  <script type="module">
+    import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js';
+
+    const host = window.location.host;
+    const wsUrl = {ws_url!r}.replace('{{host}}', host);
+    const status = document.getElementById('status');
+    const rfb = new RFB(document.getElementById('screen'), wsUrl);
+    rfb.scaleViewport = true;
+    rfb.resizeSession = true;
+    rfb.viewOnly = false;
+
+    rfb.addEventListener('connect', () => status.textContent = 'connected');
+    rfb.addEventListener('disconnect', (event) => {{
+      status.textContent = event.detail.clean ? 'disconnected' : 'connection failed';
+    }});
+    rfb.addEventListener('credentialsrequired', () => {{
+      status.textContent = 'credentials required';
+    }});
+    document.getElementById('send-ctrl-alt-del').addEventListener('click', () => {{
+      rfb.sendCtrlAltDel();
+    }});
+  </script>
+</body>
+</html>
+"""
+    return HTMLResponse(page)
+
+
 @app.post(
     "/api/v1/consoles/xterm/{vmid}",
     response_model=ConsoleSessionResponse,
@@ -437,6 +542,11 @@ async def vnc_websocket(
     vmid: int,
     settings: Settings = Depends(get_settings),
 ):
+    try:
+        require_websocket_console_token(websocket, settings)
+    except RuntimeError:
+        await websocket.close(code=1008)
+        return
     client = PveApi(settings)
     proxy = await client.vnc_proxy(settings.pve_node, vmid)
     target = client.websocket_url(
@@ -457,6 +567,11 @@ async def xterm_websocket(
     vmid: int,
     settings: Settings = Depends(get_settings),
 ):
+    try:
+        require_websocket_console_token(websocket, settings)
+    except RuntimeError:
+        await websocket.close(code=1008)
+        return
     client = PveApi(settings)
     proxy = await client.vm_term_proxy(settings.pve_node, vmid)
     target = client.websocket_url(
