@@ -1,6 +1,9 @@
 import ssl
 import html
 import re
+import secrets
+import time
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -20,6 +23,8 @@ from app.ip_pool import (
 from app.pve_api import PveApi, PveApiError
 from app.schemas import (
     ConsoleSessionResponse,
+    ConsoleTokenRequest,
+    ConsoleTokenResponse,
     ImageTemplateResponse,
     IpPoolAddRequest,
     IpPoolAddress,
@@ -30,6 +35,7 @@ from app.schemas import (
 from app.security import require_api_token
 
 app = FastAPI(title="PVETrafficManager Platform API", version="0.1.0")
+CONSOLE_TOKENS: dict[str, dict[str, int | float | None]] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,15 +63,71 @@ def public_ws_url(settings: Settings, path: str) -> str:
     return f"{base}{path}"
 
 
-def require_console_token(token: str | None, settings: Settings) -> None:
-    if not token or token != settings.api_token:
+def cleanup_console_tokens() -> None:
+    now = time.time()
+    expired = [
+        token
+        for token, payload in CONSOLE_TOKENS.items()
+        if float(payload["expires_at"]) <= now
+    ]
+    for token in expired:
+        CONSOLE_TOKENS.pop(token, None)
+
+
+def require_console_token(
+    token: str | None,
+    settings: Settings,
+    vmid: int | None = None,
+) -> None:
+    if token == settings.api_token:
+        return
+    cleanup_console_tokens()
+    payload = CONSOLE_TOKENS.get(token or "")
+    if not payload:
         raise HTTPException(status_code=401, detail="Invalid console token")
+    bound_vmid = payload.get("vmid")
+    if bound_vmid is not None and vmid is not None and int(bound_vmid) != vmid:
+        raise HTTPException(status_code=403, detail="Console token is not valid for this VM")
 
 
-def require_websocket_console_token(websocket: WebSocket, settings: Settings) -> None:
+def require_websocket_console_token(
+    websocket: WebSocket,
+    settings: Settings,
+    vmid: int,
+) -> None:
     token = websocket.query_params.get("token")
-    if not token or token != settings.api_token:
+    if token == settings.api_token:
+        return
+    cleanup_console_tokens()
+    payload = CONSOLE_TOKENS.get(token or "")
+    if not payload:
         raise RuntimeError("Invalid console token")
+    bound_vmid = payload.get("vmid")
+    if bound_vmid is not None and int(bound_vmid) != vmid:
+        raise RuntimeError("Console token is not valid for this VM")
+
+
+def vmid_from_console_token(token: str | None, settings: Settings) -> int:
+    cleanup_console_tokens()
+    payload = CONSOLE_TOKENS.get(token or "")
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid console token")
+    bound_vmid = payload.get("vmid")
+    if bound_vmid is None:
+        raise HTTPException(status_code=400, detail="Console token is not bound to a VM")
+    return int(bound_vmid)
+
+
+def vmid_from_websocket_console_token(websocket: WebSocket) -> int:
+    token = websocket.query_params.get("token")
+    cleanup_console_tokens()
+    payload = CONSOLE_TOKENS.get(token or "")
+    if not payload:
+        raise RuntimeError("Invalid console token")
+    bound_vmid = payload.get("vmid")
+    if bound_vmid is None:
+        raise RuntimeError("Console token is not bound to a VM")
+    return int(bound_vmid)
 
 
 @app.get("/health")
@@ -389,19 +451,41 @@ async def create_vnc_session(
     )
 
 
-@app.get("/console/vnc/{vmid}", response_class=HTMLResponse)
-async def vnc_console_page(
-    vmid: int,
-    token: str | None = None,
+@app.post(
+    "/api/v1/consoles/token",
+    response_model=ConsoleTokenResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def create_console_token(
+    req: ConsoleTokenRequest,
     settings: Settings = Depends(get_settings),
-) -> HTMLResponse:
-    require_console_token(token, settings)
+) -> ConsoleTokenResponse:
+    cleanup_console_tokens()
+    token = secrets.token_urlsafe(32)
+    expires_at_ts = time.time() + req.ttl_seconds
+    CONSOLE_TOKENS[token] = {
+        "vmid": req.vmid,
+        "expires_at": expires_at_ts,
+    }
+    expires_at = datetime.fromtimestamp(expires_at_ts, tz=timezone.utc)
+    base = settings.public_base_url.rstrip("/") if settings.public_base_url else ""
+    return ConsoleTokenResponse(
+        token=token,
+        expires_at=expires_at,
+        vmid=req.vmid,
+        console_url=f"{base}/console?token={token}",
+    )
+
+
+def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) -> HTMLResponse:
+    ws_url_path = f"/ws/vnc?token={token}"
     ws_scheme = "wss" if settings.public_base_url.startswith("https://") else "ws"
     if settings.public_base_url:
         base = settings.public_base_url.rstrip("/")
-        ws_url = f"{base.replace('https://', 'wss://').replace('http://', 'ws://')}/ws/vnc/{vmid}?token={token}"
+        ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
+        ws_url = f"{ws_base}{ws_url_path}"
     else:
-        ws_url = f"{ws_scheme}://{html.escape('{host}')}/ws/vnc/{vmid}?token={token}"
+        ws_url = f"{ws_scheme}://{html.escape('{host}')}{ws_url_path}"
     page = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -481,6 +565,25 @@ async def vnc_console_page(
     return HTMLResponse(page)
 
 
+@app.get("/console", response_class=HTMLResponse)
+async def bound_vnc_console_page(
+    token: str | None = None,
+    settings: Settings = Depends(get_settings),
+) -> HTMLResponse:
+    vmid = vmid_from_console_token(token, settings)
+    return render_vnc_console_page(vmid, token, settings)
+
+
+@app.get("/console/vnc/{vmid}", response_class=HTMLResponse)
+async def vnc_console_page(
+    vmid: int,
+    token: str | None = None,
+    settings: Settings = Depends(get_settings),
+) -> HTMLResponse:
+    require_console_token(token, settings, vmid)
+    return render_vnc_console_page(vmid, token, settings)
+
+
 @app.post(
     "/api/v1/consoles/xterm/{vmid}",
     response_model=ConsoleSessionResponse,
@@ -536,6 +639,30 @@ async def proxy_pve_websocket(
         await asyncio.gather(client_to_pve(), pve_to_client())
 
 
+@app.websocket("/ws/vnc")
+async def bound_vnc_websocket(
+    websocket: WebSocket,
+    settings: Settings = Depends(get_settings),
+):
+    try:
+        vmid = vmid_from_websocket_console_token(websocket)
+    except RuntimeError:
+        await websocket.close(code=1008)
+        return
+    client = PveApi(settings)
+    proxy = await client.vnc_proxy(settings.pve_node, vmid)
+    target = client.websocket_url(
+        f"/nodes/{settings.pve_node}/qemu/{vmid}/vncwebsocket",
+        {"port": proxy["port"], "vncticket": proxy["ticket"]},
+    )
+    await proxy_pve_websocket(
+        websocket,
+        target,
+        client.headers["Authorization"],
+        settings.pve_verify_ssl,
+    )
+
+
 @app.websocket("/ws/vnc/{vmid}")
 async def vnc_websocket(
     websocket: WebSocket,
@@ -543,7 +670,7 @@ async def vnc_websocket(
     settings: Settings = Depends(get_settings),
 ):
     try:
-        require_websocket_console_token(websocket, settings)
+        require_websocket_console_token(websocket, settings, vmid)
     except RuntimeError:
         await websocket.close(code=1008)
         return
@@ -568,7 +695,7 @@ async def xterm_websocket(
     settings: Settings = Depends(get_settings),
 ):
     try:
-        require_websocket_console_token(websocket, settings)
+        require_websocket_console_token(websocket, settings, vmid)
     except RuntimeError:
         await websocket.close(code=1008)
         return

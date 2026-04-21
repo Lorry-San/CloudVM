@@ -47,14 +47,43 @@ VM lifecycle endpoints:
 
 Console endpoints:
 
+- `POST /api/v1/consoles/token`
 - `POST /api/v1/consoles/vnc/{vmid}`
 - `POST /api/v1/consoles/xterm/{vmid}`
+- `GET /console?token=<CONSOLE_TOKEN>`
 - `GET /console/vnc/{vmid}?token=<PLATFORM_API_TOKEN>`
+- `WS /ws/vnc`
 - `WS /ws/vnc/{vmid}`
 - `WS /ws/xterm/{vmid}`
 
 The browser VNC page uses noVNC and connects back through the platform
 WebSocket proxy. The PVE backend URL and VNC ticket stay server-side.
+
+Use `POST /api/v1/consoles/token` with the platform API token to mint a short
+lived VNC console token. The token is bound to one VM, and the browser only
+needs the returned `/console?token=...` URL:
+
+```json
+{
+  "vmid": 101,
+  "ttl_seconds": 600
+}
+```
+
+Example response:
+
+```json
+{
+  "token": "short-lived-token",
+  "vmid": 101,
+  "expires_at": "2026-04-22T10:00:00Z",
+  "console_url": "https://panel.example.com/console?token=short-lived-token"
+}
+```
+
+The `/console` page resolves the VMID from the token server-side, then connects
+to `WS /ws/vnc?token=...`. Tokens are currently in-memory; restarting the
+platform invalidates existing console links.
 
 ## Next implementation steps
 

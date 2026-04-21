@@ -74,6 +74,18 @@ class ConsoleSessionResponse(BaseModel):
     note: str = "Use this platform URL only. PVE host, ticket, and backend URL are not exposed."
 
 
+class ConsoleTokenRequest(BaseModel):
+    vmid: int = Field(description="VMID this console token can open.")
+    ttl_seconds: int = Field(default=600, ge=60, le=86400)
+
+
+class ConsoleTokenResponse(BaseModel):
+    token: str
+    expires_at: datetime
+    vmid: int
+    console_url: str
+
+
 class IpPoolAddRequest(BaseModel):
     addresses: list[str] = Field(default_factory=list)
     range: str | None = Field(
