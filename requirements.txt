@@ -1,0 +1,6 @@
+fastapi==0.115.6
+httpx==0.28.1
+pydantic-settings==2.7.1
+python-telegram-bot==21.9
+uvicorn[standard]==0.34.0
+websockets==14.1

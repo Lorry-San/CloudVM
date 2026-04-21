@@ -1,0 +1,93 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class VmCreateRequest(BaseModel):
+    vmid: int | None = None
+    name: str
+    image: str | None = None
+    template_vmid: int | None = None
+    cores: int = Field(default=1, ge=1)
+    memory_mb: int = Field(default=1024, ge=256)
+    disk_gb: int | None = Field(default=None, ge=1)
+    storage: str | None = None
+    bridge: str | None = None
+    boot_order: str | None = Field(
+        default=None,
+        description="PVE boot order, for example: scsi0;ide2;net0",
+    )
+    ci_user: str | None = None
+    ci_password: str | None = None
+    ssh_keys: str | None = None
+    ip_config: str | None = Field(
+        default=None,
+        description="PVE ipconfig0 value, for example: ip=dhcp",
+    )
+    nameserver: str | None = None
+    searchdomain: str | None = None
+    allocate_ip: bool = True
+    owner: str | None = None
+    expires_at: datetime | None = None
+    traffic_limit_gb: float | None = Field(default=None, gt=0)
+    start: bool = True
+
+
+class VmActionResponse(BaseModel):
+    vmid: int
+    task: str | None = None
+    start_task: str | None = None
+    allocated_ip: str | None = None
+    status: str = "accepted"
+
+
+class ImageTemplateResponse(BaseModel):
+    image: str
+    template_vmid: int
+
+
+class VmExpirationRequest(BaseModel):
+    expires_at: datetime | None = None
+    action: Literal["pause", "delete"] = "pause"
+
+
+class ConsoleSessionResponse(BaseModel):
+    vmid: int | None = None
+    node: str
+    console: Literal["vnc", "xterm"]
+    websocket_url: str
+    note: str = "Use this platform URL only. PVE host, ticket, and backend URL are not exposed."
+
+
+class IpPoolAddRequest(BaseModel):
+    addresses: list[str] = Field(default_factory=list)
+    range: str | None = Field(
+        default=None,
+        description="CIDR range to import, for example: 203.0.113.32/29",
+    )
+    cidr: int = Field(ge=1, le=128)
+    gateway: str
+    nameserver: str | None = None
+    bridge: str | None = None
+    note: str | None = None
+
+
+class IpPoolAddress(BaseModel):
+    address: str
+    cidr: int
+    gateway: str
+    nameserver: str | None = None
+    bridge: str | None = None
+    status: Literal["available", "allocated", "reserved"] = "available"
+    vmid: int | None = None
+    note: str | None = None
+
+
+class IpLease(BaseModel):
+    address: str
+    cidr: int
+    gateway: str
+    nameserver: str | None = None
+    bridge: str | None = None
+    ip_config: str
