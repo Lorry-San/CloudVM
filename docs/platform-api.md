@@ -113,6 +113,10 @@ routes:
     on-link: true
 ```
 
+The snippet matches the VM network card by its generated MAC address and renames
+it to `eth0`, so large deployments do not depend on distro-specific interface
+names such as `ens18` or `enp6s18`.
+
 Release an IP:
 
 ```text

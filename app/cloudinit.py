@@ -13,12 +13,19 @@ def needs_onlink_network_config(lease: IpLease) -> bool:
     return address.version == 4 and gateway.version == 4 and lease.cidr == 32
 
 
-def render_network_config(lease: IpLease, interface: str = "eth0") -> str:
+def render_network_config(
+    lease: IpLease,
+    mac_address: str,
+    interface: str = "eth0",
+) -> str:
     nameservers = [lease.nameserver] if lease.nameserver else ["8.8.8.8"]
     nameserver_lines = "\n".join(f"                - {item}" for item in nameservers)
     return f"""version: 2
 ethernets:
     {interface}:
+        match:
+            macaddress: "{mac_address.lower()}"
+        set-name: {interface}
         dhcp4: false
         dhcp6: false
         addresses:
@@ -35,12 +42,17 @@ ethernets:
 """
 
 
-def write_network_snippet(settings: Settings, vmid: int, lease: IpLease) -> str:
+def write_network_snippet(
+    settings: Settings,
+    vmid: int,
+    lease: IpLease,
+    mac_address: str,
+) -> str:
     snippet_dir = Path(settings.snippet_dir)
     snippet_dir.mkdir(parents=True, exist_ok=True)
     filename = f"vm-{vmid}-network.yaml"
     path = snippet_dir / filename
-    path.write_text(render_network_config(lease), encoding="utf-8")
+    path.write_text(render_network_config(lease, mac_address), encoding="utf-8")
     return f"{settings.snippet_storage}:snippets/{filename}"
 
 

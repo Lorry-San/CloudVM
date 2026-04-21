@@ -110,6 +110,9 @@ class PveApi:
     async def set_vm_config(self, node: str, vmid: int, data: dict[str, Any]) -> str:
         return await self.request("POST", f"/nodes/{node}/qemu/{vmid}/config", data)
 
+    async def vm_config(self, node: str, vmid: int) -> dict[str, Any]:
+        return await self.request("GET", f"/nodes/{node}/qemu/{vmid}/config")
+
     async def resize_disk(
         self,
         node: str,
