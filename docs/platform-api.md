@@ -100,22 +100,10 @@ ip=<address>/<cidr>,gw=<gateway>
 
 Set `allocate_ip` to `false` or pass `ip_config` manually to bypass the pool.
 
-For IPv4 `/32` pool entries, the backend writes a custom cloud-init
-network-config snippet under `/var/lib/vz/snippets` and attaches it with
-`cicustom`. This is needed when the gateway is outside the VM address prefix:
-
-```yaml
-routes:
-  - to: <gateway>/32
-    scope: link
-  - to: 0.0.0.0/0
-    via: <gateway>
-    on-link: true
-```
-
-The snippet matches the VM network card by its generated MAC address and renames
-it to `eth0`, so large deployments do not depend on distro-specific interface
-names such as `ens18` or `enp6s18`.
+The platform currently uses PVE native cloud-init `ipconfig0` for IP assignment.
+This keeps the IP visible and editable in the PVE Cloud-Init panel. For `/32`
+public IPs with off-subnet gateways, the guest image must be able to handle
+`ip=<address>/32,gw=<gateway>` or include a template-side network hook.
 
 Release an IP:
 

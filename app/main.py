@@ -1,16 +1,12 @@
-import ssl
 import re
+import ssl
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
 
 from app.config import Settings, get_settings
-from app.cloudinit import (
-    delete_network_snippet,
-    needs_onlink_network_config,
-    write_network_snippet,
-)
+from app.cloudinit import delete_network_snippet
 from app.db import init_db
 from app.ip_pool import (
     add_ip_addresses,
@@ -79,7 +75,6 @@ def build_cloud_init_config(
     req: VmCreateRequest,
     allocated_ip_config: str | None = None,
     allocated_nameserver: str | None = None,
-    custom_network: str | None = None,
 ) -> dict[str, object]:
     config: dict[str, object] = {}
     if req.ci_user:
@@ -90,7 +85,7 @@ def build_cloud_init_config(
         config["sshkeys"] = req.ssh_keys
     ip_config = req.ip_config or allocated_ip_config
     nameserver = req.nameserver or allocated_nameserver
-    if ip_config and not custom_network:
+    if ip_config:
         config["ipconfig0"] = ip_config
     if nameserver:
         config["nameserver"] = nameserver
@@ -98,8 +93,6 @@ def build_cloud_init_config(
         config["searchdomain"] = req.searchdomain
     if req.boot_order:
         config["boot"] = f"order={req.boot_order}"
-    if custom_network:
-        config["cicustom"] = f"network={custom_network}"
     return config
 
 
@@ -124,14 +117,6 @@ def build_vm_config(req: VmCreateRequest, net0: str) -> dict[str, object]:
         "net0": net0,
     }
     return config
-
-
-def extract_net_mac(config: dict[str, object], device: str = "net0") -> str:
-    value = str(config.get(device, ""))
-    first = value.split(",", 1)[0]
-    if "=" in first:
-        return first.split("=", 1)[1]
-    raise HTTPException(status_code=502, detail=f"Unable to detect {device} MAC")
 
 
 def detect_primary_disk(config: dict[str, object]) -> str:
@@ -228,7 +213,6 @@ async def create_vm(
             if lease.bridge:
                 bridge = lease.bridge
         net0 = build_net0_config(req, bridge)
-        custom_network = None
         if template_vmid:
             task = await client.clone_vm(
                 settings.pve_node,
@@ -244,19 +228,10 @@ async def create_vm(
                 build_vm_config(req, net0),
             )
             vm_config = await client.vm_config(settings.pve_node, vmid)
-            if lease and needs_onlink_network_config(lease):
-                mac_address = extract_net_mac(vm_config)
-                custom_network = write_network_snippet(
-                    settings,
-                    vmid,
-                    lease,
-                    mac_address,
-                )
             cloud_init_config = build_cloud_init_config(
                 req,
                 allocated_ip_config=lease.ip_config if lease else None,
                 allocated_nameserver=lease.nameserver if lease else None,
-                custom_network=custom_network,
             )
             if req.disk_gb:
                 primary_disk = detect_primary_disk(vm_config)
@@ -278,19 +253,10 @@ async def create_vm(
                 net0,
             )
             vm_config = await client.vm_config(settings.pve_node, vmid)
-            if lease and needs_onlink_network_config(lease):
-                mac_address = extract_net_mac(vm_config)
-                custom_network = write_network_snippet(
-                    settings,
-                    vmid,
-                    lease,
-                    mac_address,
-                )
             cloud_init_config = build_cloud_init_config(
                 req,
                 allocated_ip_config=lease.ip_config if lease else None,
                 allocated_nameserver=lease.nameserver if lease else None,
-                custom_network=custom_network,
             )
             if cloud_init_config:
                 await client.set_vm_config(settings.pve_node, vmid, cloud_init_config)
