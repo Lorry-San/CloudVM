@@ -100,6 +100,19 @@ ip=<address>/<cidr>,gw=<gateway>
 
 Set `allocate_ip` to `false` or pass `ip_config` manually to bypass the pool.
 
+For IPv4 `/32` pool entries, the backend writes a custom cloud-init
+network-config snippet under `/var/lib/vz/snippets` and attaches it with
+`cicustom`. This is needed when the gateway is outside the VM address prefix:
+
+```yaml
+routes:
+  - to: <gateway>/32
+    scope: link
+  - to: 0.0.0.0/0
+    via: <gateway>
+    on-link: true
+```
+
 Release an IP:
 
 ```text

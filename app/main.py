@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import websockets
 
 from app.config import Settings, get_settings
+from app.cloudinit import needs_onlink_network_config, write_network_snippet
 from app.db import init_db
 from app.ip_pool import add_ip_addresses, allocate_ip, list_ip_addresses, release_ip
 from app.pve_api import PveApi, PveApiError
@@ -67,6 +68,7 @@ def build_cloud_init_config(
     req: VmCreateRequest,
     allocated_ip_config: str | None = None,
     allocated_nameserver: str | None = None,
+    custom_network: str | None = None,
 ) -> dict[str, object]:
     config: dict[str, object] = {}
     if req.ci_user:
@@ -77,7 +79,7 @@ def build_cloud_init_config(
         config["sshkeys"] = req.ssh_keys
     ip_config = req.ip_config or allocated_ip_config
     nameserver = req.nameserver or allocated_nameserver
-    if ip_config:
+    if ip_config and not custom_network:
         config["ipconfig0"] = ip_config
     if nameserver:
         config["nameserver"] = nameserver
@@ -85,6 +87,8 @@ def build_cloud_init_config(
         config["searchdomain"] = req.searchdomain
     if req.boot_order:
         config["boot"] = f"order={req.boot_order}"
+    if custom_network:
+        config["cicustom"] = f"network={custom_network}"
     return config
 
 
@@ -165,10 +169,14 @@ async def create_vm(
                 raise HTTPException(status_code=409, detail="No available IP address")
             if lease.bridge:
                 bridge = lease.bridge
+        custom_network = None
+        if lease and needs_onlink_network_config(lease):
+            custom_network = write_network_snippet(settings, vmid, lease)
         cloud_init_config = build_cloud_init_config(
             req,
             allocated_ip_config=lease.ip_config if lease else None,
             allocated_nameserver=lease.nameserver if lease else None,
+            custom_network=custom_network,
         )
         if template_vmid:
             task = await client.clone_vm(

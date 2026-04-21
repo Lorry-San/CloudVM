@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
     db_path: str = Field(default="./data/platform.db", alias="PLATFORM_DB_PATH")
+    snippet_dir: str = Field(
+        default="/var/lib/vz/snippets",
+        alias="PVE_SNIPPET_DIR",
+    )
+    snippet_storage: str = Field(default="local", alias="PVE_SNIPPET_STORAGE")
     default_storage: str = Field(default="local-lvm", alias="PVE_DEFAULT_STORAGE")
     default_bridge: str = Field(default="vmbr0", alias="PVE_DEFAULT_BRIDGE")
     image_templates: dict[str, int] = Field(
