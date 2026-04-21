@@ -139,7 +139,15 @@ Example create request:
   "image": "debian-12",
   "cores": 2,
   "memory_mb": 2048,
+  "disk_gb": 40,
   "storage": "local-lvm",
+  "network": {
+    "bridge": "vmbr0",
+    "model": "virtio",
+    "rate": 100,
+    "vlan_tag": null,
+    "firewall": true
+  },
   "boot_order": "scsi0;ide2;net0",
   "ci_user": "debian",
   "ci_password": "change-after-login",
@@ -155,8 +163,14 @@ The backend flow is:
 1. Resolve `image` to a PVE template VMID.
 2. Clone the template.
 3. Wait for the clone UPID to finish.
-4. Apply cloud-init and boot order config.
-5. Start the VM.
+4. Apply CPU, memory, network model, bridge, VLAN, and rate config.
+5. Resize `scsi0` when `disk_gb` is provided.
+6. Apply cloud-init and boot order config.
+7. Start the VM.
+
+Deleting a VM through `DELETE /api/v1/vms/{vmid}` stops the VM, deletes it from
+PVE, releases the IP pool lease attached to that VMID, and removes the generated
+network snippet.
 
 For Linux cloud images, make sure the PVE template already has a cloud-init drive
 configured. Windows images usually require a different initialization path; do not

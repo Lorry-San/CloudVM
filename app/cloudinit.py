@@ -42,3 +42,8 @@ def write_network_snippet(settings: Settings, vmid: int, lease: IpLease) -> str:
     path = snippet_dir / filename
     path.write_text(render_network_config(lease), encoding="utf-8")
     return f"{settings.snippet_storage}:snippets/{filename}"
+
+
+def delete_network_snippet(settings: Settings, vmid: int) -> None:
+    path = Path(settings.snippet_dir) / f"vm-{vmid}-network.yaml"
+    path.unlink(missing_ok=True)

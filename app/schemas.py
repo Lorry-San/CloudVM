@@ -4,6 +4,18 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class VmNetworkConfig(BaseModel):
+    bridge: str | None = None
+    model: Literal["virtio", "e1000", "rtl8139", "vmxnet3"] = "virtio"
+    rate: float | None = Field(
+        default=None,
+        gt=0,
+        description="PVE net rate limit value, same unit as qemu net[n] rate.",
+    )
+    vlan_tag: int | None = Field(default=None, ge=1, le=4094)
+    firewall: bool | None = None
+
+
 class VmCreateRequest(BaseModel):
     vmid: int | None = None
     name: str
@@ -14,6 +26,7 @@ class VmCreateRequest(BaseModel):
     disk_gb: int | None = Field(default=None, ge=1)
     storage: str | None = None
     bridge: str | None = None
+    network: VmNetworkConfig | None = None
     boot_order: str | None = Field(
         default=None,
         description="PVE boot order, for example: scsi0;ide2;net0",
@@ -39,6 +52,7 @@ class VmActionResponse(BaseModel):
     task: str | None = None
     start_task: str | None = None
     allocated_ip: str | None = None
+    released_ip: str | None = None
     status: str = "accepted"
 
 

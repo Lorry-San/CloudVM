@@ -140,6 +140,31 @@ def release_ip(settings: Settings, address: str) -> IpPoolAddress | None:
     return _row_to_address(updated)
 
 
+def release_ip_by_vmid(settings: Settings, vmid: int) -> IpPoolAddress | None:
+    with connect_db(settings) as conn:
+        row = conn.execute(
+            "SELECT * FROM ip_pool WHERE vmid = ? AND status = 'allocated'",
+            (vmid,),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            """
+            UPDATE ip_pool
+            SET status = 'available',
+                vmid = NULL,
+                released_at = CURRENT_TIMESTAMP
+            WHERE address = ?
+            """,
+            (row["address"],),
+        )
+        updated = conn.execute(
+            "SELECT * FROM ip_pool WHERE address = ?",
+            (row["address"],),
+        ).fetchone()
+    return _row_to_address(updated)
+
+
 def bind_allocated_ip(settings: Settings, address: str, vmid: int) -> None:
     normalized = str(ip_address(address))
     with connect_db(settings) as conn:

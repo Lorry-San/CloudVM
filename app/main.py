@@ -5,9 +5,19 @@ from fastapi.middleware.cors import CORSMiddleware
 import websockets
 
 from app.config import Settings, get_settings
-from app.cloudinit import needs_onlink_network_config, write_network_snippet
+from app.cloudinit import (
+    delete_network_snippet,
+    needs_onlink_network_config,
+    write_network_snippet,
+)
 from app.db import init_db
-from app.ip_pool import add_ip_addresses, allocate_ip, list_ip_addresses, release_ip
+from app.ip_pool import (
+    add_ip_addresses,
+    allocate_ip,
+    list_ip_addresses,
+    release_ip,
+    release_ip_by_vmid,
+)
 from app.pve_api import PveApi, PveApiError
 from app.schemas import (
     ConsoleSessionResponse,
@@ -92,6 +102,29 @@ def build_cloud_init_config(
     return config
 
 
+def build_net0_config(req: VmCreateRequest, bridge: str) -> str:
+    network = req.network
+    model = network.model if network else "virtio"
+    selected_bridge = network.bridge if network and network.bridge else bridge
+    parts = [model, f"bridge={selected_bridge}"]
+    if network and network.rate is not None:
+        parts.append(f"rate={network.rate}")
+    if network and network.vlan_tag is not None:
+        parts.append(f"tag={network.vlan_tag}")
+    if network and network.firewall is not None:
+        parts.append(f"firewall={1 if network.firewall else 0}")
+    return ",".join(parts)
+
+
+def build_vm_config(req: VmCreateRequest, net0: str) -> dict[str, object]:
+    config: dict[str, object] = {
+        "cores": req.cores,
+        "memory": req.memory_mb,
+        "net0": net0,
+    }
+    return config
+
+
 @app.post(
     "/api/v1/ip-pool",
     response_model=list[IpPoolAddress],
@@ -169,6 +202,7 @@ async def create_vm(
                 raise HTTPException(status_code=409, detail="No available IP address")
             if lease.bridge:
                 bridge = lease.bridge
+        net0 = build_net0_config(req, bridge)
         custom_network = None
         if lease and needs_onlink_network_config(lease):
             custom_network = write_network_snippet(settings, vmid, lease)
@@ -187,6 +221,13 @@ async def create_vm(
                 storage,
             )
             await client.wait_for_task(settings.pve_node, task)
+            await client.set_vm_config(
+                settings.pve_node,
+                vmid,
+                build_vm_config(req, net0),
+            )
+            if req.disk_gb:
+                await client.resize_disk(settings.pve_node, vmid, "scsi0", req.disk_gb)
             if cloud_init_config:
                 await client.set_vm_config(settings.pve_node, vmid, cloud_init_config)
         else:
@@ -196,7 +237,7 @@ async def create_vm(
                 req.name,
                 req.cores,
                 req.memory_mb,
-                bridge,
+                net0,
             )
             if cloud_init_config:
                 await client.set_vm_config(settings.pve_node, vmid, cloud_init_config)
@@ -273,8 +314,19 @@ async def delete_vm(
     settings: Settings = Depends(get_settings),
 ) -> VmActionResponse:
     try:
+        try:
+            await client.vm_action(settings.pve_node, vmid, "stop")
+        except PveApiError:
+            pass
         task = await client.delete_vm(settings.pve_node, vmid)
-        return VmActionResponse(vmid=vmid, task=task, status="deleting")
+        released = release_ip_by_vmid(settings, vmid)
+        delete_network_snippet(settings, vmid)
+        return VmActionResponse(
+            vmid=vmid,
+            task=task,
+            released_ip=released.address if released else None,
+            status="deleting",
+        )
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

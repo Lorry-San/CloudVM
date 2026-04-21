@@ -93,7 +93,7 @@ class PveApi:
         name: str,
         cores: int,
         memory_mb: int,
-        bridge: str,
+        net0: str,
     ) -> str:
         return await self.request(
             "POST",
@@ -103,12 +103,25 @@ class PveApi:
                 "name": name,
                 "cores": cores,
                 "memory": memory_mb,
-                "net0": f"virtio,bridge={bridge}",
+                "net0": net0,
             },
         )
 
     async def set_vm_config(self, node: str, vmid: int, data: dict[str, Any]) -> str:
         return await self.request("POST", f"/nodes/{node}/qemu/{vmid}/config", data)
+
+    async def resize_disk(
+        self,
+        node: str,
+        vmid: int,
+        disk: str,
+        size_gb: int,
+    ) -> str:
+        return await self.request(
+            "PUT",
+            f"/nodes/{node}/qemu/{vmid}/resize",
+            {"disk": disk, "size": f"{size_gb}G"},
+        )
 
     async def vm_status(self, node: str, vmid: int) -> Any:
         return await self.request("GET", f"/nodes/{node}/qemu/{vmid}/status/current")
