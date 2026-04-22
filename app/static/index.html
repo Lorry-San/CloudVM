@@ -297,9 +297,6 @@
           <h1>控制台</h1>
           <div class="statusline" id="summary">等待连接</div>
         </div>
-        <div class="actions">
-          <button class="secondary" id="open-api">API 文档</button>
-        </div>
       </div>
 
       <section class="grid metrics">
@@ -379,9 +376,9 @@
               <label>存储<input name="storage" placeholder="默认"></label>
               <label>网桥<input name="bridge" placeholder="vmbr0"></label>
               <label>端口速率<input name="rate" type="number" step="0.1" placeholder="不限制"></label>
-              <label>系统用户<input name="ci_user" value="root"></label>
-              <label>系统密码<input name="ci_password" value="ChangeMe123!"></label>
-              <label>DNS<input name="nameserver" value="8.8.8.8"></label>
+              <label>系统用户<input name="ci_user" placeholder="可留空"></label>
+              <label>系统密码<input name="ci_password" type="password" autocomplete="new-password" placeholder="可留空"></label>
+              <label>DNS<input name="nameserver" placeholder="可留空"></label>
               <label class="wide">SSH 公钥<textarea name="ssh_keys" placeholder="可留空"></textarea></label>
               <label class="wide">手动 IP 配置<input name="ip_config" placeholder="留空则从 IP 池随机分配"></label>
               <div class="actions wide">
@@ -401,11 +398,11 @@
           </div>
           <div class="card-body">
             <form id="ip-form" class="form-grid">
-              <label class="wide">IP 列表<input name="addresses" placeholder="23.147.56.95,23.147.56.106"></label>
-              <label>CIDR<input name="cidr" type="number" min="1" max="128" value="24"></label>
-              <label>网关<input name="gateway" value="23.147.56.254"></label>
-              <label>DNS<input name="nameserver" value="8.8.8.8"></label>
-              <label>网桥<input name="bridge" value="vmbr0"></label>
+              <label class="wide">IP 列表<input name="addresses" placeholder="用英文逗号分隔"></label>
+              <label>CIDR<input name="cidr" type="number" min="1" max="128" placeholder="24"></label>
+              <label>网关<input name="gateway" placeholder="必填"></label>
+              <label>DNS<input name="nameserver" placeholder="可留空"></label>
+              <label>网桥<input name="bridge" placeholder="可留空"></label>
               <label>备注<input name="note"></label>
               <div class="actions wide"><button type="submit">加入 IP 池</button></div>
             </form>
@@ -416,7 +413,6 @@
                 <tr>
                   <th>IP</th>
                   <th>CIDR</th>
-                  <th>网关</th>
                   <th>状态</th>
                   <th>VMID</th>
                   <th>操作</th>
@@ -433,11 +429,12 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const state = {
-      token: localStorage.getItem('platformToken') || '',
+      token: sessionStorage.getItem('platformToken') || '',
       vms: [],
       images: [],
       ips: [],
     };
+    localStorage.removeItem('platformToken');
 
     $('token').value = state.token;
 
@@ -449,7 +446,34 @@
     }
 
     function log(value) {
-      $('detail-log').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      $('detail-log').textContent = typeof value === 'string' ? value : safeSummary(value);
+    }
+
+    function safeSummary(value) {
+      if (!value || typeof value !== 'object') return '-';
+      if (value.scope === 'host') {
+        return [
+          `宿主机: ${value.node || '-'}`,
+          `CPU: ${(Number(value.cpu?.usage || 0) * 100).toFixed(1)}%`,
+          `内存: ${fmtGb(value.memory?.used_gb)} / ${fmtGb(value.memory?.total_gb)}`,
+          `磁盘: ${fmtGb(value.disk?.used_gb)} / ${fmtGb(value.disk?.total_gb)}`,
+          `网络: ${fmtGb(value.network?.rx_gb)} ↓ / ${fmtGb(value.network?.tx_gb)} ↑`,
+        ].join('\n');
+      }
+      if (value.scope === 'vm') {
+        return [
+          `VMID: ${value.vmid}`,
+          `名称: ${value.name || '-'}`,
+          `状态: ${value.status || '-'}`,
+          `CPU: ${(Number(value.cpu?.usage || 0) * 100).toFixed(1)}%`,
+          `内存: ${fmtGb(value.memory?.used_gb)} / ${fmtGb(value.memory?.total_gb)}`,
+          `流量: ${fmtGb(value.network?.tap_traffic?.total_gb)} total`,
+        ].join('\n');
+      }
+      if (value.vmid) return `任务已提交\nVMID: ${value.vmid}\n状态: ${value.status || 'accepted'}`;
+      if (value.console_url) return `VNC 链接已生成\nVMID: ${value.vmid}\n有效期: ${value.expires_at || '-'}`;
+      if (Array.isArray(value)) return `完成，共 ${value.length} 条记录`;
+      return '操作完成';
     }
 
     function fmtGb(value) {
@@ -555,7 +579,6 @@
         tr.innerHTML = `
           <td>${ip.address}</td>
           <td>${ip.cidr}</td>
-          <td>${ip.gateway}</td>
           <td>${vmPill(ip.status)}</td>
           <td>${ip.vmid || '-'}</td>
           <td><button class="secondary" data-action="release-ip" data-ip="${ip.address}">释放</button></td>
@@ -583,7 +606,7 @@
       renderImages();
       renderIps();
       $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
-      log(host);
+      log('已刷新');
     }
 
     async function loadVmStatus(vmid) {
@@ -599,7 +622,7 @@
           body: JSON.stringify({ vmid: Number(vmid), ttl_seconds: 600 }),
         });
         window.open(data.console_url, '_blank', 'noopener');
-        log(data);
+        log(`VNC 链接已生成\nVMID: ${vmid}\n有效期: ${data.expires_at || '-'}`);
         return;
       }
       if (action === 'delete') {
@@ -627,13 +650,12 @@
 
     $('save-token').addEventListener('click', async () => {
       state.token = $('token').value.trim();
-      localStorage.setItem('platformToken', state.token);
+      sessionStorage.setItem('platformToken', state.token);
       await loadAll().catch((err) => log(err.message));
     });
 
     $('reload').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
     $('refresh-ips').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
-    $('open-api').addEventListener('click', () => window.open('/docs', '_blank', 'noopener'));
     $('load-vm-status').addEventListener('click', () => {
       const vmid = $('vmid-filter').value.trim();
       if (vmid) loadVmStatus(vmid).catch((err) => log(err.message));

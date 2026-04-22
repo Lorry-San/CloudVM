@@ -36,7 +36,13 @@ from app.schemas import (
 from app.security import require_api_token
 from app.status import normalize_node_status, normalize_vm_status, vm_tap_traffic
 
-app = FastAPI(title="PVETrafficManager Platform API", version="0.1.0")
+app = FastAPI(
+    title="PVETrafficManager Platform API",
+    version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 CONSOLE_TOKENS: dict[str, dict[str, int | float | None]] = {}
 
 app.add_middleware(

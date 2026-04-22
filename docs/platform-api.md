@@ -67,7 +67,8 @@ The built-in dashboard is served by the same FastAPI process:
 - `GET /dashboard`
 
 Open it in a browser and enter `PLATFORM_API_TOKEN`. The dashboard stores the
-platform token in browser local storage and calls the same API endpoints.
+platform token only in browser session storage and calls the same API endpoints.
+Public FastAPI docs and OpenAPI schema are disabled by default.
 
 Use `POST /api/v1/consoles/token` with the platform API token to mint a short
 lived VNC console token. The token is bound to one VM, and the browser only
