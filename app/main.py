@@ -606,7 +606,7 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
   </div>
   <div id="screen"></div>
   <script type="module">
-    import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/core/rfb.js';
+    import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.2.0/core/rfb.js';
 
     const host = window.location.host;
     const wsUrl = {ws_url!r}.replace('{{host}}', host);

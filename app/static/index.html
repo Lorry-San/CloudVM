@@ -251,6 +251,68 @@
       text-align: center;
     }
     .hidden { display: none; }
+    .login {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        linear-gradient(135deg, rgba(15, 23, 42, .96), rgba(29, 95, 215, .82)),
+        #0f172a;
+    }
+    .login-card {
+      width: min(440px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .22);
+      padding: 26px;
+      display: grid;
+      gap: 18px;
+    }
+    .login-card h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .login-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+    .icon {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+      border-radius: 4px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 13px;
+      vertical-align: -4px;
+    }
+    .tree-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      border-radius: 3px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 12px;
+      vertical-align: -3px;
+    }
+    .dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      margin-right: 6px;
+      background: #98a2b3;
+    }
+    .dot.running { background: #12b76a; }
+    .dot.stopped { background: #98a2b3; }
+    .dot.alert { background: #f79009; }
 
     @media (max-width: 1100px) {
       .shell { grid-template-columns: 1fr; }
@@ -268,18 +330,29 @@
   </style>
 </head>
 <body>
-  <div class="shell">
+  <section class="login" id="login-view">
+    <div class="login-card">
+      <div>
+        <h1>PVETrafficManager</h1>
+        <p>输入平台 Token 后进入控制台</p>
+      </div>
+      <label>
+        平台 Token
+        <input id="login-token" type="password" autocomplete="off" autofocus>
+      </label>
+      <button id="login-button">登录</button>
+      <div class="statusline" id="login-error"></div>
+    </div>
+  </section>
+
+  <div class="shell hidden" id="app-view">
     <aside class="side">
       <div class="brand">
         <strong>PVETrafficManager</strong>
         <span>Platform Console</span>
       </div>
-      <label>
-        平台 Token
-        <input id="token" type="password" autocomplete="off">
-      </label>
       <div class="actions">
-        <button id="save-token">保存</button>
+        <button id="logout" class="danger">退出</button>
         <button class="secondary" id="reload">刷新</button>
       </div>
       <nav class="nav">
@@ -294,29 +367,29 @@
     <main class="main">
       <div class="topbar" id="overview">
         <div>
-          <h1>控制台</h1>
+          <h1><span class="icon">▣</span>控制台</h1>
           <div class="statusline" id="summary">等待连接</div>
         </div>
       </div>
 
       <section class="grid metrics">
         <div class="card metric">
-          <span>CPU</span>
+          <span><span class="icon">◆</span>CPU</span>
           <strong id="cpu-value">-</strong>
           <div class="bar"><i id="cpu-bar"></i></div>
         </div>
         <div class="card metric">
-          <span>内存</span>
+          <span><span class="icon">▦</span>内存</span>
           <strong id="mem-value">-</strong>
           <div class="bar"><i id="mem-bar"></i></div>
         </div>
         <div class="card metric">
-          <span>磁盘</span>
+          <span><span class="icon">▤</span>磁盘</span>
           <strong id="disk-value">-</strong>
           <div class="bar"><i id="disk-bar"></i></div>
         </div>
         <div class="card metric">
-          <span>网络</span>
+          <span><span class="icon">⇄</span>网络</span>
           <strong id="net-value">-</strong>
           <div class="statusline" id="io-value">IO -</div>
         </div>
@@ -325,7 +398,7 @@
       <section class="grid two">
         <div class="card" id="vms">
           <div class="card-head">
-            <h2>虚拟机</h2>
+            <h2><span class="tree-icon">▣</span>虚拟机</h2>
             <div class="actions">
               <input id="vmid-filter" placeholder="VMID 状态查询" inputmode="numeric">
               <button class="secondary" id="load-vm-status">查看</button>
@@ -363,7 +436,7 @@
       <section class="grid two">
         <div class="card" id="create">
           <div class="card-head">
-            <h2>新建 VM</h2>
+            <h2><span class="tree-icon">＋</span>新建 VM</h2>
           </div>
           <div class="card-body">
             <form id="create-form" class="form-grid">
@@ -393,7 +466,7 @@
 
         <div class="card" id="ips">
           <div class="card-head">
-            <h2>IP 池</h2>
+            <h2><span class="tree-icon">⇄</span>IP 池</h2>
             <button class="secondary" id="refresh-ips">刷新</button>
           </div>
           <div class="card-body">
@@ -435,8 +508,7 @@
       ips: [],
     };
     localStorage.removeItem('platformToken');
-
-    $('token').value = state.token;
+    $('login-token').value = state.token;
 
     function headers() {
       return {
@@ -521,7 +593,7 @@
 
     function vmPill(status) {
       const cls = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'alert';
-      return `<span class="pill ${cls}">${status || '-'}</span>`;
+      return `<span class="pill ${cls}"><span class="dot ${cls}"></span>${status || '-'}</span>`;
     }
 
     function renderVms() {
@@ -589,7 +661,7 @@
 
     async function loadAll() {
       if (!state.token) {
-        log('请先保存平台 Token');
+        showLogin('请先登录');
         return;
       }
       const [host, vms, images, ips] = await Promise.all([
@@ -607,6 +679,36 @@
       renderIps();
       $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
       log('已刷新');
+    }
+
+    function showApp() {
+      $('login-view').classList.add('hidden');
+      $('app-view').classList.remove('hidden');
+      $('login-error').textContent = '';
+    }
+
+    function showLogin(message = '') {
+      $('app-view').classList.add('hidden');
+      $('login-view').classList.remove('hidden');
+      $('login-error').textContent = message;
+      $('login-token').focus();
+    }
+
+    async function login() {
+      state.token = $('login-token').value.trim();
+      if (!state.token) {
+        showLogin('请输入平台 Token');
+        return;
+      }
+      sessionStorage.setItem('platformToken', state.token);
+      try {
+        await loadAll();
+        showApp();
+      } catch (err) {
+        sessionStorage.removeItem('platformToken');
+        state.token = '';
+        showLogin(err.message);
+      }
     }
 
     async function loadVmStatus(vmid) {
@@ -648,10 +750,14 @@
       return Number(value);
     }
 
-    $('save-token').addEventListener('click', async () => {
-      state.token = $('token').value.trim();
-      sessionStorage.setItem('platformToken', state.token);
-      await loadAll().catch((err) => log(err.message));
+    $('login-button').addEventListener('click', () => login());
+    $('login-token').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') login();
+    });
+    $('logout').addEventListener('click', () => {
+      sessionStorage.removeItem('platformToken');
+      state.token = '';
+      showLogin('已退出');
     });
 
     $('reload').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
@@ -736,7 +842,9 @@
     });
 
     if (state.token) {
-      loadAll().catch((err) => log(err.message));
+      login();
+    } else {
+      showLogin();
     }
   </script>
 </body>
