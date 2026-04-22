@@ -33,6 +33,25 @@ CREATE TABLE IF NOT EXISTS vm_credentials (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS metric_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL,
+    vmid INTEGER,
+    sampled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    cpu_percent REAL NOT NULL DEFAULT 0,
+    memory_percent REAL NOT NULL DEFAULT 0,
+    disk_percent REAL NOT NULL DEFAULT 0,
+    io_gb REAL NOT NULL DEFAULT 0,
+    network_gb REAL NOT NULL DEFAULT 0,
+    traffic_gb REAL NOT NULL DEFAULT 0,
+    gpu_percent REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_metric_samples_scope_time
+    ON metric_samples(scope, sampled_at);
+CREATE INDEX IF NOT EXISTS idx_metric_samples_vmid_time
+    ON metric_samples(vmid, sampled_at);
 """
 
 

@@ -1,4 +1,5 @@
 import ssl
+import asyncio
 import html
 import json
 import re
@@ -29,6 +30,7 @@ from app.ip_pool import (
     release_ip,
     release_ip_by_vmid,
 )
+from app.metrics import list_metric_samples, record_metric_sample
 from app.pve_api import PveApi, PveApiError
 from app.schemas import (
     ConsoleSessionResponse,
@@ -54,6 +56,7 @@ app = FastAPI(
     openapi_url=None,
 )
 CONSOLE_TOKENS: dict[str, dict[str, int | float | None]] = {}
+METRIC_SAMPLER_TASK: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,11 +69,50 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup() -> None:
-    init_db(get_settings())
+    global METRIC_SAMPLER_TASK
+    settings = get_settings()
+    init_db(settings)
+    METRIC_SAMPLER_TASK = asyncio.create_task(metric_sampler(settings))
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    if METRIC_SAMPLER_TASK:
+        METRIC_SAMPLER_TASK.cancel()
 
 
 def pve(settings: Settings = Depends(get_settings)) -> PveApi:
     return PveApi(settings)
+
+
+async def collect_status_snapshot(
+    vmid: int | None,
+    client: PveApi,
+    settings: Settings,
+) -> dict[str, object]:
+    if vmid is None:
+        node_status = await client.node_status(settings.pve_node)
+        return normalize_node_status(settings.pve_node, node_status)
+    vm_status = await client.vm_status(settings.pve_node, vmid)
+    return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid), settings.pve_node)
+
+
+async def metric_sampler(settings: Settings) -> None:
+    await asyncio.sleep(10)
+    while True:
+        try:
+            client = PveApi(settings)
+            host_status = await collect_status_snapshot(None, client, settings)
+            record_metric_sample(settings, host_status)
+            for vm in await client.list_vms(settings.pve_node):
+                vmid = int(vm.get("vmid"))
+                vm_status = await collect_status_snapshot(vmid, client, settings)
+                record_metric_sample(settings, vm_status)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+        await asyncio.sleep(60)
 
 
 def public_ws_url(settings: Settings, path: str) -> str:
@@ -443,11 +485,9 @@ async def build_status_response(
     settings: Settings,
 ) -> dict[str, object]:
     try:
-        if vmid is None:
-            node_status = await client.node_status(settings.pve_node)
-            return normalize_node_status(settings.pve_node, node_status)
-        vm_status = await client.vm_status(settings.pve_node, vmid)
-        return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid), settings.pve_node)
+        status = await collect_status_snapshot(vmid, client, settings)
+        record_metric_sample(settings, status)
+        return status
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -474,6 +514,18 @@ async def get_status_alias(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, object]:
     return await build_status_response(vmid, client, settings)
+
+
+@app.get(
+    "/api/v1/metrics/history",
+    dependencies=[Depends(require_api_token)],
+)
+async def get_metric_history(
+    vmid: int | None = None,
+    hours: int = 24,
+    settings: Settings = Depends(get_settings),
+) -> list[dict[str, object]]:
+    return list_metric_samples(settings, vmid, hours)
 
 
 @app.post(

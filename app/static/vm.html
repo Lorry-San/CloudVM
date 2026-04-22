@@ -489,6 +489,17 @@
         gpu: ['显卡占用率(%)', '%', 100],
       }[key] || ['CPU 使用率(%)', '%', 100];
     }
+    function metricSamplesFromHistory(rows) {
+      return (Array.isArray(rows) ? rows : []).map((row) => ({
+        time: new Date(row.sampled_at),
+        cpu: Number(row.cpu_percent || 0),
+        io: Number(row.io_gb || 0),
+        memory: Number(row.memory_percent || 0),
+        network: Number(row.network_gb || 0),
+        traffic: Number(row.traffic_gb || 0),
+        gpu: Number(row.gpu_percent || 0),
+      })).filter((row) => !Number.isNaN(row.time.getTime()));
+    }
     function addVmSample(status, values) {
       vmSamples.push({
         time: new Date(),
@@ -564,11 +575,13 @@
       }
     }
     async function load() {
-      const [status, vmRaw, ips] = await Promise.all([
+      const [status, vmRaw, ips, history] = await Promise.all([
         api(`/api/v1/status?vmid=${vmid}`),
         api(`/api/v1/vms/${vmid}`),
         api(`/api/v1/vms/${vmid}/ips`),
+        api(`/api/v1/metrics/history?vmid=${vmid}&hours=24`),
       ]);
+      vmSamples = metricSamplesFromHistory(history);
       render(status, vmRaw, Array.isArray(ips) ? ips : []);
     }
     function render(status, vmRaw, ips) {

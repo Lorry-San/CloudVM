@@ -793,6 +793,18 @@
       }[key] || ['CPU 使用率(%)', '%', 100];
     }
 
+    function metricSamplesFromHistory(rows) {
+      return (Array.isArray(rows) ? rows : []).map((row) => ({
+        time: new Date(row.sampled_at),
+        cpu: Number(row.cpu_percent || 0),
+        io: Number(row.io_gb || 0),
+        memory: Number(row.memory_percent || 0),
+        network: Number(row.network_gb || 0),
+        traffic: Number(row.traffic_gb || 0),
+        gpu: Number(row.gpu_percent || 0),
+      })).filter((row) => !Number.isNaN(row.time.getTime()));
+    }
+
     function chartPoints(samples, key, maxValue) {
       const values = samples.map((sample) => Number(sample[key] || 0));
       const max = maxValue || Math.max(1, ...values) * 1.15;
@@ -903,12 +915,16 @@
         return;
       }
       log('正在加载数据...');
-      const [hostResult, vmsResult, imagesResult, ipsResult] = await Promise.allSettled([
+      const [hostResult, vmsResult, imagesResult, ipsResult, historyResult] = await Promise.allSettled([
         api('/api/v1/status'),
         api('/api/v1/vms'),
         api('/api/v1/images'),
         api('/api/v1/ip-pool'),
+        api('/api/v1/metrics/history?hours=24'),
       ]);
+      if (historyResult.status === 'fulfilled') {
+        state.hostSamples = metricSamplesFromHistory(historyResult.value);
+      }
       if (hostResult.status === 'fulfilled') {
         renderHost(hostResult.value);
       } else {
