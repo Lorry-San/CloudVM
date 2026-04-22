@@ -92,6 +92,7 @@ class VmTrafficConfigRequest(BaseModel):
     reset_day: int = Field(default=1, ge=1, le=28)
     reset_hour: int = Field(default=0, ge=0, le=23)
     timezone: str = "Asia/Shanghai"
+    reset_usage: bool = False
 
 
 class VmTrafficConfigResponse(BaseModel):

@@ -74,14 +74,32 @@ def set_vm_traffic_config(
 ) -> dict[str, Any]:
     rx, tx = current_counters(status or {})
     now = utc_now().isoformat()
+    existing = get_config_row(settings, vmid)
+    if existing is None or req.reset_usage:
+        used_rx = 0
+        used_tx = 0
+        baseline_rx = rx
+        baseline_tx = tx
+        baseline_at = now
+        period_started_at = now
+    else:
+        tracked = update_usage_from_counters(settings, existing, status or {})
+        used_rx = int(tracked.get("used_rx_bytes") or 0)
+        used_tx = int(tracked.get("used_tx_bytes") or 0)
+        baseline_rx = int(tracked.get("baseline_rx_bytes") or 0)
+        baseline_tx = int(tracked.get("baseline_tx_bytes") or 0)
+        baseline_at = str(tracked.get("baseline_at") or now)
+        period_started_at = tracked.get("period_started_at") or baseline_at
     with connect_db(settings) as conn:
         conn.execute(
             """
             INSERT INTO vm_traffic_configs(
                 vmid, quota_gb, reset_day, reset_hour, timezone,
-                baseline_rx_bytes, baseline_tx_bytes, baseline_at, updated_at
+                baseline_rx_bytes, baseline_tx_bytes,
+                used_rx_bytes, used_tx_bytes, last_rx_bytes, last_tx_bytes,
+                period_started_at, baseline_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(vmid) DO UPDATE SET
                 quota_gb = excluded.quota_gb,
                 reset_day = excluded.reset_day,
@@ -89,6 +107,11 @@ def set_vm_traffic_config(
                 timezone = excluded.timezone,
                 baseline_rx_bytes = excluded.baseline_rx_bytes,
                 baseline_tx_bytes = excluded.baseline_tx_bytes,
+                used_rx_bytes = excluded.used_rx_bytes,
+                used_tx_bytes = excluded.used_tx_bytes,
+                last_rx_bytes = excluded.last_rx_bytes,
+                last_tx_bytes = excluded.last_tx_bytes,
+                period_started_at = excluded.period_started_at,
                 baseline_at = excluded.baseline_at,
                 updated_at = excluded.updated_at
             """,
@@ -98,9 +121,14 @@ def set_vm_traffic_config(
                 req.reset_day,
                 req.reset_hour,
                 req.timezone or DEFAULT_TZ,
+                baseline_rx,
+                baseline_tx,
+                used_rx,
+                used_tx,
                 rx,
                 tx,
-                now,
+                period_started_at,
+                baseline_at,
                 now,
             ),
         )
@@ -114,6 +142,41 @@ def get_config_row(settings: Settings, vmid: int) -> dict[str, Any] | None:
             (vmid,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def reset_period(
+    settings: Settings,
+    row: dict[str, Any],
+    status: dict[str, Any],
+) -> dict[str, Any]:
+    rx, tx = current_counters(status)
+    now = utc_now().isoformat()
+    with connect_db(settings) as conn:
+        conn.execute(
+            """
+            UPDATE vm_traffic_configs
+            SET baseline_rx_bytes = ?, baseline_tx_bytes = ?,
+                used_rx_bytes = 0, used_tx_bytes = 0,
+                last_rx_bytes = ?, last_tx_bytes = ?,
+                period_started_at = ?, baseline_at = ?, updated_at = ?
+            WHERE vmid = ?
+            """,
+            (rx, tx, rx, tx, now, now, now, row["vmid"]),
+        )
+    updated = dict(row)
+    updated.update(
+        {
+            "baseline_rx_bytes": rx,
+            "baseline_tx_bytes": tx,
+            "used_rx_bytes": 0,
+            "used_tx_bytes": 0,
+            "last_rx_bytes": rx,
+            "last_tx_bytes": tx,
+            "period_started_at": now,
+            "baseline_at": now,
+        }
+    )
+    return updated
 
 
 def ensure_period_baseline(
@@ -131,23 +194,40 @@ def ensure_period_baseline(
     baseline_at = parse_dt(row.get("baseline_at"))
     if baseline_at >= period_start:
         return row
+    return reset_period(settings, row, status)
 
+
+def update_usage_from_counters(
+    settings: Settings,
+    row: dict[str, Any],
+    status: dict[str, Any],
+) -> dict[str, Any]:
+    row = ensure_period_baseline(settings, row, status)
     rx, tx = current_counters(status)
-    baseline = now.isoformat()
+    last_rx = int(row.get("last_rx_bytes") or row.get("baseline_rx_bytes") or 0)
+    last_tx = int(row.get("last_tx_bytes") or row.get("baseline_tx_bytes") or 0)
+    used_rx = int(row.get("used_rx_bytes") or 0)
+    used_tx = int(row.get("used_tx_bytes") or 0)
+    rx_delta = rx - last_rx if rx >= last_rx else rx
+    tx_delta = tx - last_tx if tx >= last_tx else tx
+    used_rx += max(0, rx_delta)
+    used_tx += max(0, tx_delta)
+    now = utc_now().isoformat()
     with connect_db(settings) as conn:
         conn.execute(
             """
             UPDATE vm_traffic_configs
-            SET baseline_rx_bytes = ?, baseline_tx_bytes = ?,
-                baseline_at = ?, updated_at = ?
+            SET used_rx_bytes = ?, used_tx_bytes = ?,
+                last_rx_bytes = ?, last_tx_bytes = ?, updated_at = ?
             WHERE vmid = ?
             """,
-            (rx, tx, baseline, baseline, row["vmid"]),
+            (used_rx, used_tx, rx, tx, now, row["vmid"]),
         )
     updated = dict(row)
-    updated["baseline_rx_bytes"] = rx
-    updated["baseline_tx_bytes"] = tx
-    updated["baseline_at"] = baseline
+    updated["used_rx_bytes"] = used_rx
+    updated["used_tx_bytes"] = used_tx
+    updated["last_rx_bytes"] = rx
+    updated["last_tx_bytes"] = tx
     return updated
 
 
@@ -173,11 +253,8 @@ def get_vm_traffic_usage(
             "baseline_at": None,
         }
 
-    row = ensure_period_baseline(settings, row, status)
-    rx, tx = current_counters(status)
-    baseline_rx = int(row.get("baseline_rx_bytes") or 0)
-    baseline_tx = int(row.get("baseline_tx_bytes") or 0)
-    used_bytes = max(0, rx - baseline_rx) + max(0, tx - baseline_tx)
+    row = update_usage_from_counters(settings, row, status)
+    used_bytes = int(row.get("used_rx_bytes") or 0) + int(row.get("used_tx_bytes") or 0)
     used_gb = bytes_to_gb(used_bytes)
     quota_gb = row.get("quota_gb")
     remaining_gb = None

@@ -723,6 +723,7 @@
             reset_day: optionalNumber(resetDay) || 1,
             reset_hour: optionalNumber(resetHour) || 0,
             timezone: 'Asia/Shanghai',
+            reset_usage: false,
           }),
         });
       }
@@ -739,6 +740,7 @@
           reset_day: lastTraffic?.reset_day || 1,
           reset_hour: lastTraffic?.reset_hour || 0,
           timezone: lastTraffic?.timezone || 'Asia/Shanghai',
+          reset_usage: true,
         }),
       });
       await load();

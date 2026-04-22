@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS vm_traffic_configs (
     timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
     baseline_rx_bytes INTEGER NOT NULL DEFAULT 0,
     baseline_tx_bytes INTEGER NOT NULL DEFAULT 0,
+    used_rx_bytes INTEGER NOT NULL DEFAULT 0,
+    used_tx_bytes INTEGER NOT NULL DEFAULT 0,
+    last_rx_bytes INTEGER NOT NULL DEFAULT 0,
+    last_tx_bytes INTEGER NOT NULL DEFAULT 0,
+    period_started_at TEXT,
     baseline_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -85,6 +90,31 @@ def init_db(settings: Settings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(SCHEMA)
+        ensure_columns(
+            conn,
+            "vm_traffic_configs",
+            {
+                "used_rx_bytes": "INTEGER NOT NULL DEFAULT 0",
+                "used_tx_bytes": "INTEGER NOT NULL DEFAULT 0",
+                "last_rx_bytes": "INTEGER NOT NULL DEFAULT 0",
+                "last_tx_bytes": "INTEGER NOT NULL DEFAULT 0",
+                "period_started_at": "TEXT",
+            },
+        )
+
+
+def ensure_columns(
+    conn: sqlite3.Connection,
+    table: str,
+    columns: dict[str, str],
+) -> None:
+    existing = {
+        row[1]
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    for name, ddl in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
 @contextmanager

@@ -112,6 +112,11 @@ async def metric_sampler(settings: Settings) -> None:
             for vm in await client.list_vms(settings.pve_node):
                 vmid = int(vm.get("vmid"))
                 vm_status = await collect_status_snapshot(vmid, client, settings)
+                vm_status["traffic_billing"] = get_vm_traffic_usage(
+                    settings,
+                    vmid,
+                    vm_status,
+                )
                 record_metric_sample(settings, vm_status)
         except asyncio.CancelledError:
             raise
