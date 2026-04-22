@@ -11,7 +11,11 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
-from Crypto.Cipher import DES
+
+try:
+    from Crypto.Cipher import DES
+except ImportError:
+    DES = None
 
 from app.config import Settings, get_settings
 from app.cloudinit import delete_network_snippet
@@ -21,6 +25,7 @@ from app.ip_pool import (
     add_ip_addresses,
     allocate_ip,
     list_ip_addresses,
+    list_ip_addresses_by_vmid,
     release_ip,
     release_ip_by_vmid,
 )
@@ -271,6 +276,18 @@ async def get_ip_pool(
     return list_ip_addresses(settings, status)
 
 
+@app.get(
+    "/api/v1/vms/{vmid}/ips",
+    response_model=list[IpPoolAddress],
+    dependencies=[Depends(require_api_token)],
+)
+async def get_vm_ip_pool(
+    vmid: int,
+    settings: Settings = Depends(get_settings),
+) -> list[IpPoolAddress]:
+    return list_ip_addresses_by_vmid(settings, vmid)
+
+
 @app.post(
     "/api/v1/ip-pool/{address}/release",
     response_model=IpPoolAddress,
@@ -423,7 +440,7 @@ async def build_status_response(
             node_status = await client.node_status(settings.pve_node)
             return normalize_node_status(settings.pve_node, node_status)
         vm_status = await client.vm_status(settings.pve_node, vmid)
-        return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid))
+        return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid), settings.pve_node)
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -737,6 +754,9 @@ async def proxy_pve_websocket(
     if target_url.startswith("wss://") and not verify_ssl:
         ssl_context = ssl._create_unverified_context()
     await websocket.accept()
+    if vnc_password and DES is None:
+        await websocket.close(code=1011)
+        return
     async with websockets.connect(
         target_url,
         additional_headers={"Authorization": auth_header},
@@ -776,6 +796,8 @@ def reverse_bits(value: int) -> int:
 
 
 def vnc_auth_response(password: str, challenge: bytes) -> bytes:
+    if DES is None:
+        raise RuntimeError("pycryptodome is required for VNC authentication proxy")
     key = bytes(reverse_bits(byte) for byte in password.encode("utf-8")[:8])
     key = key.ljust(8, b"\x00")
     return DES.new(key, DES.MODE_ECB).encrypt(challenge)

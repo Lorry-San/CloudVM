@@ -224,7 +224,7 @@
             </div>
           </div>
           <div class="hero-actions">
-            <button id="btn-stop">断网/暂停</button>
+            <button id="btn-stop">暂停</button>
             <button id="btn-restart">重启</button>
             <button id="btn-console">控制台</button>
             <button id="btn-paste">凭据</button>
@@ -325,6 +325,10 @@
       $('login-view').classList.add('hidden');
       $('app').classList.remove('hidden');
     }
+    function showError(message) {
+      $('vm-subtitle').textContent = message || '加载失败';
+      $('info-status').textContent = message || '加载失败';
+    }
     async function login() {
       token = $('token').value.trim();
       if (!token) return showLogin('请输入平台 Token');
@@ -342,9 +346,9 @@
       const [status, vmRaw, ips] = await Promise.all([
         api(`/api/v1/status?vmid=${vmid}`),
         api(`/api/v1/vms/${vmid}`),
-        api('/api/v1/ip-pool'),
+        api(`/api/v1/vms/${vmid}/ips`),
       ]);
-      render(status, vmRaw, Array.isArray(ips) ? ips.filter((item) => item.vmid === vmid) : []);
+      render(status, vmRaw, Array.isArray(ips) ? ips : []);
     }
     function render(status, vmRaw, ips) {
       const name = status.name || vmRaw.name || `VM ${vmid}`;
@@ -356,7 +360,7 @@
       $('vm-mem').textContent = `${Math.round((status.memory?.total_gb || 0))}G`;
       $('info-name').textContent = name;
       $('info-status').innerHTML = pill(status.status);
-      $('info-node').textContent = 'pve';
+      $('info-node').textContent = status.node || '-';
       $('info-disk').textContent = `${gb(status.disk?.used_gb)} / ${gb(status.disk?.total_gb)}`;
       $('info-traffic').textContent = `${gb(status.network?.tap_traffic?.total_gb)} total`;
       $('task-time').textContent = new Date().toLocaleString();
@@ -371,7 +375,7 @@
       ];
       $('traffic-table').innerHTML = rows.map((row) => `<tr><td>${row[0]}</td><td>${mbFromGb(row[1])}</td><td>${mbFromGb(row[2])}</td><td>${mbFromGb(row[3])}</td><td>0.01%</td></tr>`).join('');
       $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
-      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>vmbr0</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary">编辑</button></td></tr>`;
+      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>${ips[0]?.bridge || '-'}</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary">编辑</button></td></tr>`;
     }
     async function openConsole() {
       const data = await api('/api/v1/consoles/token', { method: 'POST', body: JSON.stringify({ vmid, ttl_seconds: 600 }) });
@@ -385,8 +389,11 @@
       await api(`/api/v1/vms/${vmid}/credentials`, { method: 'PUT', body: JSON.stringify({ username: username || null, password: password || null }) });
       alert('已保存');
     }
-    async function action(path, method = 'POST') {
+    async function apiAction(path, method = 'POST') {
       await api(path, { method, body: method === 'DELETE' ? undefined : '{}' });
+    }
+    async function action(path, method = 'POST') {
+      await apiAction(path, method);
       await load();
     }
     $('login').addEventListener('click', login);
@@ -399,8 +406,9 @@
     $('btn-start').addEventListener('click', () => action(`/api/v1/vms/${vmid}/resume`));
     $('btn-stop').addEventListener('click', () => action(`/api/v1/vms/${vmid}/pause`));
     $('btn-restart').addEventListener('click', async () => {
-      await action(`/api/v1/vms/${vmid}/pause`);
-      await action(`/api/v1/vms/${vmid}/resume`);
+      await apiAction(`/api/v1/vms/${vmid}/pause`);
+      await apiAction(`/api/v1/vms/${vmid}/resume`);
+      await load();
     });
     $('btn-delete').addEventListener('click', async () => {
       if (!confirm(`删除 VM ${vmid}?`)) return;
@@ -409,7 +417,7 @@
     });
     if (token) {
       showApp();
-      load().catch((err) => showLogin(err.message));
+      load().catch((err) => showError(err.message));
     } else {
       showLogin();
     }

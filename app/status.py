@@ -116,7 +116,12 @@ def host_network() -> dict[str, Any]:
     }
 
 
-def normalize_vm_status(vmid: int, raw: dict[str, Any], traffic: dict[str, Any]) -> dict[str, Any]:
+def normalize_vm_status(
+    vmid: int,
+    raw: dict[str, Any],
+    traffic: dict[str, Any],
+    node: str | None = None,
+) -> dict[str, Any]:
     memory_used = int(raw.get("mem") or 0)
     memory_total = int(raw.get("maxmem") or 0)
     disk_used = int(raw.get("disk") or 0)
@@ -128,6 +133,7 @@ def normalize_vm_status(vmid: int, raw: dict[str, Any], traffic: dict[str, Any])
     return {
         "scope": "vm",
         "vmid": vmid,
+        "node": node,
         "name": raw.get("name"),
         "status": raw.get("status"),
         "uptime": raw.get("uptime"),

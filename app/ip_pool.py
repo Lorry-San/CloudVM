@@ -76,6 +76,15 @@ def list_ip_addresses(
     return [_row_to_address(row) for row in rows]
 
 
+def list_ip_addresses_by_vmid(settings: Settings, vmid: int) -> list[IpPoolAddress]:
+    with connect_db(settings) as conn:
+        rows = conn.execute(
+            "SELECT * FROM ip_pool WHERE vmid = ? ORDER BY address",
+            (vmid,),
+        ).fetchall()
+    return [_row_to_address(row) for row in rows]
+
+
 def allocate_ip(settings: Settings, vmid: int | None = None) -> IpLease | None:
     with connect_db(settings) as conn:
         conn.execute("BEGIN IMMEDIATE")
