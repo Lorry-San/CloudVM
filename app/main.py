@@ -981,8 +981,10 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
   <div id="bar">
     <strong>VM {vmid}</strong>
     <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
-    <button id="paste-username" {"disabled" if not paste_username else ""}>Paste User</button>
-    <button id="paste-password" {"disabled" if not paste_password else ""}>Paste Password</button>
+    <button id="type-username" {"disabled" if not paste_username else ""}>输入用户名</button>
+    <button id="type-password" {"disabled" if not paste_password else ""}>输入密码</button>
+    <button id="type-login" {"disabled" if not paste_username or not paste_password else ""}>输入账号密码</button>
+    <button id="send-enter">Enter</button>
     <span id="status">connecting</span>
   </div>
   <div id="screen"></div>
@@ -1009,11 +1011,46 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
     document.getElementById('send-ctrl-alt-del').addEventListener('click', () => {{
       rfb.sendCtrlAltDel();
     }});
-    document.getElementById('paste-username').addEventListener('click', () => {{
-      if (pasteUsername) rfb.clipboardPasteFrom(pasteUsername);
+    function sleep(ms) {{
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }}
+    function keysymFor(char) {{
+      if (char === '\n' || char === '\r') return 0xff0d;
+      if (char === '\t') return 0xff09;
+      const codePoint = char.codePointAt(0);
+      if (codePoint >= 0x20 && codePoint <= 0x7e) return codePoint;
+      return codePoint;
+    }}
+    function sendKeysym(keysym) {{
+      rfb.sendKey(keysym, null, true);
+      rfb.sendKey(keysym, null, false);
+    }}
+    async function typeText(text, pressEnter = false) {{
+      if (!text) return;
+      status.textContent = 'typing';
+      rfb.focus();
+      for (const char of text) {{
+        sendKeysym(keysymFor(char));
+        await sleep(18);
+      }}
+      if (pressEnter) {{
+        sendKeysym(0xff0d);
+      }}
+      status.textContent = 'connected';
+    }}
+    document.getElementById('type-username').addEventListener('click', () => {{
+      typeText(pasteUsername, true);
     }});
-    document.getElementById('paste-password').addEventListener('click', () => {{
-      if (pastePassword) rfb.clipboardPasteFrom(pastePassword);
+    document.getElementById('type-password').addEventListener('click', () => {{
+      typeText(pastePassword, true);
+    }});
+    document.getElementById('type-login').addEventListener('click', async () => {{
+      await typeText(pasteUsername, true);
+      await sleep(450);
+      await typeText(pastePassword, true);
+    }});
+    document.getElementById('send-enter').addEventListener('click', () => {{
+      sendKeysym(0xff0d);
     }});
   </script>
 </body>
