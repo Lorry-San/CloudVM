@@ -129,6 +129,9 @@ class PveApi:
     async def vm_status(self, node: str, vmid: int) -> Any:
         return await self.request("GET", f"/nodes/{node}/qemu/{vmid}/status/current")
 
+    async def node_status(self, node: str) -> dict[str, Any]:
+        return await self.request("GET", f"/nodes/{node}/status")
+
     async def vm_action(self, node: str, vmid: int, action: str) -> str:
         return await self.request("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}")
 

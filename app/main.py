@@ -33,6 +33,7 @@ from app.schemas import (
     VmExpirationRequest,
 )
 from app.security import require_api_token
+from app.status import normalize_node_status, normalize_vm_status, vm_tap_traffic
 
 app = FastAPI(title="PVETrafficManager Platform API", version="0.1.0")
 CONSOLE_TOKENS: dict[str, dict[str, int | float | None]] = {}
@@ -361,6 +362,45 @@ async def get_vm(
         return await client.vm_status(settings.pve_node, vmid)
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+async def build_status_response(
+    vmid: int | None,
+    client: PveApi,
+    settings: Settings,
+) -> dict[str, object]:
+    try:
+        if vmid is None:
+            node_status = await client.node_status(settings.pve_node)
+            return normalize_node_status(settings.pve_node, node_status)
+        vm_status = await client.vm_status(settings.pve_node, vmid)
+        return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid))
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/v1/status",
+    dependencies=[Depends(require_api_token)],
+)
+async def get_status(
+    vmid: int | None = None,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    return await build_status_response(vmid, client, settings)
+
+
+@app.get(
+    "/status",
+    dependencies=[Depends(require_api_token)],
+)
+async def get_status_alias(
+    vmid: int | None = None,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    return await build_status_response(vmid, client, settings)
 
 
 @app.post(

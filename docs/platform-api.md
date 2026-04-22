@@ -38,6 +38,7 @@ VM lifecycle endpoints:
 - `GET /api/v1/ip-pool`
 - `POST /api/v1/ip-pool/{address}/release`
 - `GET /api/v1/images`
+- `GET /api/v1/status`
 - `POST /api/v1/vms`
 - `GET /api/v1/vms/{vmid}`
 - `POST /api/v1/vms/{vmid}/pause`
@@ -143,6 +144,27 @@ Release an IP:
 ```text
 POST /api/v1/ip-pool/203.0.113.10/release
 ```
+
+## Status and traffic
+
+Use `/api/v1/status` without a VMID to inspect the Proxmox node:
+
+```text
+GET /api/v1/status
+```
+
+The response includes host CPU, memory, root disk, disk IO counters from
+`/proc/diskstats`, and network counters from `/proc/net/dev`.
+
+Use the same endpoint with `vmid` to inspect one VM:
+
+```text
+GET /api/v1/status?vmid=101
+```
+
+The VM response includes PVE status fields plus traffic collected from matching
+host tap interfaces such as `tap101i0`. This brings the old traffic collection
+method into the platform API while keeping the raw PVE counters available.
 
 ## Image templates and cloud-init boot flow
 
