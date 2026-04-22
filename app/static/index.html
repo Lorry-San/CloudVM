@@ -151,7 +151,7 @@
       gap: 14px;
     }
     .metrics {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
     }
     .two {
       grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
@@ -191,6 +191,44 @@
     }
     .metric strong {
       font-size: 25px;
+    }
+    .metric .sub {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .overview-chart {
+      padding: 16px;
+    }
+    .chart-tabs {
+      display: flex;
+      gap: 26px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+      font-weight: 750;
+    }
+    .chart-tabs span {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      color: var(--ink);
+    }
+    .chart-tabs span:first-child {
+      color: var(--blue);
+      border-bottom: 2px solid var(--blue);
+    }
+    .chart-box {
+      min-height: 210px;
+      border-radius: 6px;
+      background:
+        repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e5e7eb 40px),
+        #fff;
+      overflow: hidden;
+    }
+    .chart-box svg {
+      width: 100%;
+      height: 210px;
+      display: block;
     }
     .bar {
       height: 8px;
@@ -400,25 +438,47 @@
 
       <section class="grid metrics">
         <div class="card metric">
-          <span><span class="icon">◆</span>CPU</span>
+          <span><span class="icon">C</span>CPU 使用率</span>
           <strong id="cpu-value">-</strong>
           <div class="bar"><i id="cpu-bar"></i></div>
         </div>
         <div class="card metric">
-          <span><span class="icon">▦</span>内存</span>
+          <span><span class="icon">M</span>内存使用</span>
           <strong id="mem-value">-</strong>
           <div class="bar"><i id="mem-bar"></i></div>
         </div>
         <div class="card metric">
-          <span><span class="icon">▤</span>磁盘</span>
+          <span><span class="icon">D</span>硬盘使用</span>
           <strong id="disk-value">-</strong>
           <div class="bar"><i id="disk-bar"></i></div>
         </div>
         <div class="card metric">
-          <span><span class="icon">⇄</span>网络</span>
-          <strong id="net-value">-</strong>
-          <div class="statusline" id="io-value">IO -</div>
+          <span><span class="icon">I</span>硬盘 IO</span>
+          <strong id="io-value">-</strong>
+          <div class="sub" id="io-sub">-</div>
         </div>
+        <div class="card metric">
+          <span><span class="icon">N</span>网络带宽</span>
+          <strong id="net-value">-</strong>
+          <div class="sub" id="net-sub">-</div>
+        </div>
+        <div class="card metric">
+          <span><span class="icon">T</span>流量使用</span>
+          <strong id="traffic-value">-</strong>
+          <div class="sub" id="traffic-sub">累计进出</div>
+        </div>
+      </section>
+
+      <section class="card overview-chart">
+        <div class="chart-tabs">
+          <span>CPU 使用量</span>
+          <span>硬盘IO</span>
+          <span>内存用量</span>
+          <span>网卡</span>
+          <span>用量排行</span>
+          <span>显卡占用率</span>
+        </div>
+        <div class="chart-box" id="overview-chart"></div>
       </section>
 
       <section class="grid two">
@@ -650,12 +710,33 @@
       const cpu = Number(status.cpu?.usage || 0) * 100;
       const memPct = pct(status.memory?.used_bytes, status.memory?.total_bytes);
       const diskPct = pct(status.disk?.used_bytes, status.disk?.total_bytes);
+      const rx = Number(status.network?.rx_gb || 0);
+      const tx = Number(status.network?.tx_gb || 0);
       setMetric('cpu-value', 'cpu-bar', `${cpu.toFixed(1)}%`, cpu);
       setMetric('mem-value', 'mem-bar', `${fmtGb(status.memory?.used_gb)} / ${fmtGb(status.memory?.total_gb)}`, memPct);
       setMetric('disk-value', 'disk-bar', `${fmtGb(status.disk?.used_gb)} / ${fmtGb(status.disk?.total_gb)}`, diskPct);
-      $('net-value').textContent = `${fmtGb(status.network?.rx_gb)} ↓ / ${fmtGb(status.network?.tx_gb)} ↑`;
-      $('io-value').textContent = `IO ${fmtGb(status.io?.read_gb)} 读 / ${fmtGb(status.io?.write_gb)} 写`;
+      $('io-value').textContent = `${fmtGb(status.io?.read_gb)} / ${fmtGb(status.io?.write_gb)}`;
+      $('io-sub').textContent = '读 / 写';
+      $('net-value').textContent = `${fmtGb(rx)} / ${fmtGb(tx)}`;
+      $('net-sub').textContent = '入 / 出';
+      $('traffic-value').textContent = fmtGb(rx + tx);
+      $('traffic-sub').textContent = '累计流量';
       $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时`;
+      renderOverviewChart(cpu, memPct, diskPct);
+    }
+
+    function renderOverviewChart(cpu, mem, disk) {
+      const base = [2, 3, 2, 4, 3, Math.max(4, cpu), 6, Math.max(5, mem / 3), 3, Math.max(4, disk / 4), 5, 4];
+      const points = base.map((value, index) => {
+        const x = 28 + index * 76;
+        const y = 190 - Math.min(100, value) * 1.55;
+        return `${x},${y}`;
+      }).join(' ');
+      $('overview-chart').innerHTML = `
+        <svg viewBox="0 0 920 210" preserveAspectRatio="none" aria-label="资源趋势">
+          <polyline fill="none" stroke="#52c41a" stroke-width="3" points="${points}" />
+        </svg>
+      `;
     }
 
     function vmPill(status) {
@@ -681,8 +762,7 @@
           <td>${net}</td>
           <td>
             <div class="actions">
-              <button class="secondary" data-action="status" data-vmid="${vm.vmid}">状态</button>
-              <button class="secondary" data-action="detail" data-vmid="${vm.vmid}">详情</button>
+              <button class="secondary" data-action="detail" data-vmid="${vm.vmid}">状态</button>
               <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
               <button class="secondary" data-action="credentials" data-vmid="${vm.vmid}">凭据</button>
               <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
@@ -829,7 +909,7 @@
       if (action === 'console') {
         const data = await api('/api/v1/consoles/token', {
           method: 'POST',
-          body: JSON.stringify({ vmid: Number(vmid), ttl_seconds: 600 }),
+          body: JSON.stringify({ vmid: Number(vmid), ttl_seconds: 900 }),
         });
         window.open(data.console_url, '_blank', 'noopener');
         log(`VNC 链接已生成\nVMID: ${vmid}\n有效期: ${data.expires_at || '-'}`);

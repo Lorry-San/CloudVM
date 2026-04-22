@@ -97,8 +97,6 @@ def require_console_token(
     settings: Settings,
     vmid: int | None = None,
 ) -> None:
-    if token == settings.api_token:
-        return
     cleanup_console_tokens()
     payload = CONSOLE_TOKENS.get(token or "")
     if not payload:
@@ -114,8 +112,6 @@ def require_websocket_console_token(
     vmid: int,
 ) -> None:
     token = websocket.query_params.get("token")
-    if token == settings.api_token:
-        return
     cleanup_console_tokens()
     payload = CONSOLE_TOKENS.get(token or "")
     if not payload:
@@ -648,7 +644,7 @@ async def create_console_token(
 ) -> ConsoleTokenResponse:
     cleanup_console_tokens()
     token = secrets.token_urlsafe(32)
-    expires_at_ts = time.time() + req.ttl_seconds
+    expires_at_ts = time.time() + min(req.ttl_seconds, 900)
     CONSOLE_TOKENS[token] = {
         "vmid": req.vmid,
         "expires_at": expires_at_ts,

@@ -87,7 +87,7 @@ class ConsoleSessionResponse(BaseModel):
 
 class ConsoleTokenRequest(BaseModel):
     vmid: int = Field(description="VMID this console token can open.")
-    ttl_seconds: int = Field(default=600, ge=60, le=86400)
+    ttl_seconds: int = Field(default=900, ge=60, le=900)
 
 
 class ConsoleTokenResponse(BaseModel):
