@@ -229,7 +229,7 @@
     .chart-range {
       width: min(390px, 100%);
       min-height: 30px;
-      margin: 6px auto 14px;
+      margin: 6px 0 14px auto;
       border: 1px solid var(--line);
       border-radius: 4px;
       display: flex;
@@ -1008,7 +1008,7 @@
     async function vmAction(action, vmid) {
       if (action === 'status') return loadVmStatus(vmid);
       if (action === 'detail') {
-        window.open(`/vm/${encodeURIComponent(vmid)}`, '_blank', 'noopener');
+        location.href = `/vm/${encodeURIComponent(vmid)}`;
         notify(`已打开 VM ${vmid} 详情`, 'ok');
         return;
       }
@@ -1088,7 +1088,7 @@
         notify('请输入 VMID', 'error');
         return;
       }
-      window.open(`/vm/${encodeURIComponent(vmid)}`, '_blank', 'noopener');
+      location.href = `/vm/${encodeURIComponent(vmid)}`;
     });
 
     $('overview-tabs').addEventListener('click', (event) => {
