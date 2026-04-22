@@ -686,7 +686,7 @@
               <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
               <button class="secondary" data-action="credentials" data-vmid="${vm.vmid}">凭据</button>
               <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
-              <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">暂停</button>
+              <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">关机</button>
               <button class="danger" data-action="delete" data-vmid="${vm.vmid}">删除</button>
             </div>
           </td>
@@ -847,7 +847,7 @@
       }
       if (action === 'stop') {
         log(await api(`/api/v1/vms/${vmid}/pause`, { method: 'POST', body: '{}' }));
-        notify(`VM ${vmid} 暂停任务已提交`, 'ok');
+        notify(`VM ${vmid} 关机任务已提交`, 'ok');
       }
       await loadAll();
     }

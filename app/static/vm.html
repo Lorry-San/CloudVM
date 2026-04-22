@@ -56,20 +56,6 @@
       text-overflow: ellipsis;
     }
     th { color: #111827; font-weight: 700; background: #fff; }
-    .top {
-      height: 62px;
-      background: var(--blue);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 28px;
-    }
-    .brand { display: flex; align-items: center; gap: 28px; }
-    .brand strong { font-size: 20px; }
-    .nav { display: flex; gap: 24px; color: rgba(255,255,255,.88); font-size: 14px; }
-    .search { display: flex; align-items: center; gap: 12px; }
-    .search input { width: 180px; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
     .page { padding: 30px 36px; display: grid; gap: 20px; }
     .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); gap: 20px; align-items: start; }
     .hero {
@@ -182,7 +168,7 @@
     .toast.error { background: #7f1d1d; }
     .toast.ok { background: #064e3b; }
     .login {
-      min-height: calc(100vh - 62px);
+      min-height: 100vh;
       display: grid;
       place-items: center;
     }
@@ -200,30 +186,10 @@
       .cols { grid-template-columns: 1fr; }
       .hero-spec { margin-left: 0; }
       .hero-main { flex-wrap: wrap; }
-      .nav { display: none; }
     }
   </style>
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <strong>仿心的主控</strong>
-      <nav class="nav">
-        <span>业务管理⌄</span>
-        <span>区域节点⌄</span>
-        <span>IP管理⌄</span>
-        <span>镜像和ISO⌄</span>
-        <span>用户管理⌄</span>
-        <span>监控⌄</span>
-        <span>系统设置⌄</span>
-      </nav>
-    </div>
-    <div class="search">
-      <input placeholder="请搜索">
-      <span>超级管理员</span>
-    </div>
-  </header>
-
   <section class="login hidden" id="login-view">
     <div class="login-box">
       <strong>需要登录</strong>
@@ -249,7 +215,9 @@
             </div>
           </div>
           <div class="hero-actions">
-            <button id="btn-stop">暂停</button>
+            <button id="btn-stop">关机</button>
+            <button id="btn-net-down">断网</button>
+            <button id="btn-net-up">联网</button>
             <button id="btn-restart">重启</button>
             <button id="btn-console">控制台</button>
             <button id="btn-paste">凭据</button>
@@ -258,7 +226,7 @@
           </div>
         </div>
         <div class="tabs">
-          <span>概览</span><span>设置</span><span>备份</span><span>快照</span><span>硬件直通</span><span>定时任务</span><span>智能规则</span>
+          <span>概览</span>
         </div>
         <div class="card">
           <div class="card-body">
@@ -471,7 +439,9 @@
     $('btn-paste').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
     $('btn-cred').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
     $('btn-start').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '开机中', () => action(`/api/v1/vms/${vmid}/resume`), '开机任务已提交'));
-    $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '暂停中', () => action(`/api/v1/vms/${vmid}/pause`), '暂停任务已提交'));
+    $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '关机中', () => action(`/api/v1/vms/${vmid}/pause`), '关机任务已提交'));
+    $('btn-net-down').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '断网中', () => action(`/api/v1/vms/${vmid}/network/disconnect`), '断网已提交'));
+    $('btn-net-up').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '联网中', () => action(`/api/v1/vms/${vmid}/network/connect`), '联网已提交'));
     $('btn-restart').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重启中', async () => {
       await apiAction(`/api/v1/vms/${vmid}/pause`);
       await apiAction(`/api/v1/vms/${vmid}/resume`);

@@ -234,6 +234,17 @@ def build_vm_config(req: VmCreateRequest, net0: str) -> dict[str, object]:
     return config
 
 
+def set_net_link_down(net_config: str, link_down: bool) -> str:
+    parts = [
+        part
+        for part in str(net_config).split(",")
+        if part and not part.startswith("link_down=")
+    ]
+    if link_down:
+        parts.append("link_down=1")
+    return ",".join(parts)
+
+
 def detect_primary_disk(config: dict[str, object]) -> str:
     for disk in ("scsi0", "virtio0", "sata0", "ide0"):
         value = str(config.get(disk, ""))
@@ -482,6 +493,56 @@ async def pause_vm(
     try:
         task = await client.vm_action(settings.pve_node, vmid, "stop")
         return VmActionResponse(vmid=vmid, task=task)
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/v1/vms/{vmid}/network/disconnect",
+    response_model=VmActionResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def disconnect_vm_network(
+    vmid: int,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> VmActionResponse:
+    try:
+        config = await client.vm_config(settings.pve_node, vmid)
+        net0 = str(config.get("net0") or "")
+        if not net0:
+            raise HTTPException(status_code=404, detail="VM net0 does not exist")
+        task = await client.set_vm_config(
+            settings.pve_node,
+            vmid,
+            {"net0": set_net_link_down(net0, True)},
+        )
+        return VmActionResponse(vmid=vmid, task=task, status="network_disconnected")
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/v1/vms/{vmid}/network/connect",
+    response_model=VmActionResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def connect_vm_network(
+    vmid: int,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> VmActionResponse:
+    try:
+        config = await client.vm_config(settings.pve_node, vmid)
+        net0 = str(config.get("net0") or "")
+        if not net0:
+            raise HTTPException(status_code=404, detail="VM net0 does not exist")
+        task = await client.set_vm_config(
+            settings.pve_node,
+            vmid,
+            {"net0": set_net_link_down(net0, False)},
+        )
+        return VmActionResponse(vmid=vmid, task=task, status="network_connected")
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
