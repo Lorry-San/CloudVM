@@ -107,6 +107,9 @@ class PveApi:
             },
         )
 
+    async def list_vms(self, node: str) -> list[dict[str, Any]]:
+        return await self.request("GET", f"/nodes/{node}/qemu")
+
     async def set_vm_config(self, node: str, vmid: int, data: dict[str, Any]) -> str:
         return await self.request("POST", f"/nodes/{node}/qemu/{vmid}/config", data)
 

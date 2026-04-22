@@ -39,6 +39,7 @@ VM lifecycle endpoints:
 - `POST /api/v1/ip-pool/{address}/release`
 - `GET /api/v1/images`
 - `GET /api/v1/status`
+- `GET /api/v1/vms`
 - `POST /api/v1/vms`
 - `GET /api/v1/vms/{vmid}`
 - `POST /api/v1/vms/{vmid}/pause`
@@ -59,6 +60,14 @@ Console endpoints:
 
 The browser VNC page uses noVNC and connects back through the platform
 WebSocket proxy. The PVE backend URL and VNC ticket stay server-side.
+
+The built-in dashboard is served by the same FastAPI process:
+
+- `GET /`
+- `GET /dashboard`
+
+Open it in a browser and enter `PLATFORM_API_TOKEN`. The dashboard stores the
+platform token in browser local storage and calls the same API endpoints.
 
 Use `POST /api/v1/consoles/token` with the platform API token to mint a short
 lived VNC console token. The token is bound to one VM, and the browser only

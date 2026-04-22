@@ -4,6 +4,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -134,6 +135,13 @@ def vmid_from_websocket_console_token(websocket: WebSocket) -> int:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard() -> HTMLResponse:
+    path = Path(__file__).parent / "static" / "index.html"
+    return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
 def resolve_template_vmid(req: VmCreateRequest, settings: Settings) -> int | None:
@@ -345,6 +353,20 @@ async def create_vm(
             start_task=start_task,
             allocated_ip=lease.address if lease else None,
         )
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/v1/vms",
+    dependencies=[Depends(require_api_token)],
+)
+async def list_vms(
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> list[dict[str, object]]:
+    try:
+        return await client.list_vms(settings.pve_node)
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

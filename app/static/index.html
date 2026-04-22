@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PVETrafficManager</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ef;
+      --blue: #1d5fd7;
+      --green: #087443;
+      --red: #b42318;
+      --amber: #b54708;
+      --shadow: 0 12px 30px rgba(15, 35, 70, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, select, textarea {
+      font: inherit;
+    }
+    button {
+      min-height: 36px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 12px;
+      background: var(--blue);
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.secondary { background: #eef4ff; color: #174ea6; }
+    button.danger { background: #fee4e2; color: var(--red); }
+    button.success { background: #dcfae6; color: var(--green); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input, select, textarea {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 10px;
+      outline: none;
+    }
+    textarea { min-height: 74px; resize: vertical; }
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      background: #f8fafd;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+    .side {
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .brand {
+      display: grid;
+      gap: 4px;
+    }
+    .brand strong {
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+    .brand span, .side small {
+      color: #94a3b8;
+    }
+    .side label { color: #cbd5e1; }
+    .side input {
+      background: #111c31;
+      border-color: #26364f;
+      color: #fff;
+    }
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+    .nav a {
+      color: #dbeafe;
+      text-decoration: none;
+      padding: 9px 10px;
+      border-radius: 6px;
+    }
+    .nav a.active, .nav a:hover {
+      background: #1e293b;
+    }
+    .main {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .statusline {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .metrics {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .two {
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .card-head {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .card-head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .card-body { padding: 16px; }
+    .metric {
+      min-height: 116px;
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      align-content: space-between;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .metric strong {
+      font-size: 25px;
+    }
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e6edf7;
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--blue);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .form-grid .wide { grid-column: span 3; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 74px;
+      height: 24px;
+      border-radius: 999px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .pill.running { background: #dcfae6; color: var(--green); }
+    .pill.stopped { background: #f2f4f7; color: #475467; }
+    .pill.alert { background: #fef0c7; color: var(--amber); }
+    .log {
+      min-height: 42px;
+      max-height: 160px;
+      overflow: auto;
+      background: #0f172a;
+      color: #d1e9ff;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .empty {
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .hidden { display: none; }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .metrics, .two { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .form-grid .wide { grid-column: span 2; }
+    }
+    @media (max-width: 680px) {
+      .main { padding: 14px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .form-grid, .form-grid .wide { grid-template-columns: 1fr; grid-column: span 1; }
+      th, td { min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <strong>PVETrafficManager</strong>
+        <span>Platform Console</span>
+      </div>
+      <label>
+        平台 Token
+        <input id="token" type="password" autocomplete="off">
+      </label>
+      <div class="actions">
+        <button id="save-token">保存</button>
+        <button class="secondary" id="reload">刷新</button>
+      </div>
+      <nav class="nav">
+        <a class="active" href="#overview">总览</a>
+        <a href="#vms">虚拟机</a>
+        <a href="#create">新建</a>
+        <a href="#ips">IP 池</a>
+      </nav>
+      <small id="last-refresh">未刷新</small>
+    </aside>
+
+    <main class="main">
+      <div class="topbar" id="overview">
+        <div>
+          <h1>控制台</h1>
+          <div class="statusline" id="summary">等待连接</div>
+        </div>
+        <div class="actions">
+          <button class="secondary" id="open-api">API 文档</button>
+        </div>
+      </div>
+
+      <section class="grid metrics">
+        <div class="card metric">
+          <span>CPU</span>
+          <strong id="cpu-value">-</strong>
+          <div class="bar"><i id="cpu-bar"></i></div>
+        </div>
+        <div class="card metric">
+          <span>内存</span>
+          <strong id="mem-value">-</strong>
+          <div class="bar"><i id="mem-bar"></i></div>
+        </div>
+        <div class="card metric">
+          <span>磁盘</span>
+          <strong id="disk-value">-</strong>
+          <div class="bar"><i id="disk-bar"></i></div>
+        </div>
+        <div class="card metric">
+          <span>网络</span>
+          <strong id="net-value">-</strong>
+          <div class="statusline" id="io-value">IO -</div>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <div class="card" id="vms">
+          <div class="card-head">
+            <h2>虚拟机</h2>
+            <div class="actions">
+              <input id="vmid-filter" placeholder="VMID 状态查询" inputmode="numeric">
+              <button class="secondary" id="load-vm-status">查看</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>VMID</th>
+                  <th>名称</th>
+                  <th>状态</th>
+                  <th>CPU</th>
+                  <th>内存</th>
+                  <th>流量</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="vm-table"></tbody>
+            </table>
+          </div>
+          <div class="empty hidden" id="vm-empty">暂无 VM</div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>状态详情</h2>
+          </div>
+          <div class="card-body">
+            <pre class="log" id="detail-log">-</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <div class="card" id="create">
+          <div class="card-head">
+            <h2>新建 VM</h2>
+          </div>
+          <div class="card-body">
+            <form id="create-form" class="form-grid">
+              <label>名称<input name="name" required placeholder="debian-001"></label>
+              <label>镜像<select name="image" id="image-select"></select></label>
+              <label>VMID<input name="vmid" inputmode="numeric" placeholder="自动"></label>
+              <label>CPU 核心<input name="cores" type="number" min="1" value="2"></label>
+              <label>内存 MB<input name="memory_mb" type="number" min="256" value="2048"></label>
+              <label>磁盘 GB<input name="disk_gb" type="number" min="1" value="40"></label>
+              <label>存储<input name="storage" placeholder="默认"></label>
+              <label>网桥<input name="bridge" placeholder="vmbr0"></label>
+              <label>端口速率<input name="rate" type="number" step="0.1" placeholder="不限制"></label>
+              <label>系统用户<input name="ci_user" value="root"></label>
+              <label>系统密码<input name="ci_password" value="ChangeMe123!"></label>
+              <label>DNS<input name="nameserver" value="8.8.8.8"></label>
+              <label class="wide">SSH 公钥<textarea name="ssh_keys" placeholder="可留空"></textarea></label>
+              <label class="wide">手动 IP 配置<input name="ip_config" placeholder="留空则从 IP 池随机分配"></label>
+              <div class="actions wide">
+                <button type="submit">创建并开机</button>
+                <label style="display:flex;align-items:center;gap:8px;width:auto;color:var(--ink)">
+                  <input name="allocate_ip" type="checkbox" checked style="width:18px;min-height:18px"> 分配 IP
+                </label>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card" id="ips">
+          <div class="card-head">
+            <h2>IP 池</h2>
+            <button class="secondary" id="refresh-ips">刷新</button>
+          </div>
+          <div class="card-body">
+            <form id="ip-form" class="form-grid">
+              <label class="wide">IP 列表<input name="addresses" placeholder="23.147.56.95,23.147.56.106"></label>
+              <label>CIDR<input name="cidr" type="number" min="1" max="128" value="24"></label>
+              <label>网关<input name="gateway" value="23.147.56.254"></label>
+              <label>DNS<input name="nameserver" value="8.8.8.8"></label>
+              <label>网桥<input name="bridge" value="vmbr0"></label>
+              <label>备注<input name="note"></label>
+              <div class="actions wide"><button type="submit">加入 IP 池</button></div>
+            </form>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>IP</th>
+                  <th>CIDR</th>
+                  <th>网关</th>
+                  <th>状态</th>
+                  <th>VMID</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="ip-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      token: localStorage.getItem('platformToken') || '',
+      vms: [],
+      images: [],
+      ips: [],
+    };
+
+    $('token').value = state.token;
+
+    function headers() {
+      return {
+        'Content-Type': 'application/json',
+        'X-API-Token': state.token,
+      };
+    }
+
+    function log(value) {
+      $('detail-log').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+
+    function fmtGb(value) {
+      const num = Number(value || 0);
+      if (num >= 1000) return `${(num / 1000).toFixed(2)} TB`;
+      return `${num.toFixed(2)} GB`;
+    }
+
+    function pct(used, total) {
+      if (!total) return 0;
+      return Math.max(0, Math.min(100, (Number(used) / Number(total)) * 100));
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: { ...headers(), ...(options.headers || {}) },
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!res.ok) {
+        const detail = data && data.detail ? data.detail : text;
+        throw new Error(`${res.status} ${detail}`);
+      }
+      return data;
+    }
+
+    function setMetric(id, barId, value, percent) {
+      $(id).textContent = value;
+      if (barId) $(barId).style.width = `${Math.round(percent)}%`;
+    }
+
+    function renderHost(status) {
+      const cpu = Number(status.cpu?.usage || 0) * 100;
+      const memPct = pct(status.memory?.used_bytes, status.memory?.total_bytes);
+      const diskPct = pct(status.disk?.used_bytes, status.disk?.total_bytes);
+      setMetric('cpu-value', 'cpu-bar', `${cpu.toFixed(1)}%`, cpu);
+      setMetric('mem-value', 'mem-bar', `${fmtGb(status.memory?.used_gb)} / ${fmtGb(status.memory?.total_gb)}`, memPct);
+      setMetric('disk-value', 'disk-bar', `${fmtGb(status.disk?.used_gb)} / ${fmtGb(status.disk?.total_gb)}`, diskPct);
+      $('net-value').textContent = `${fmtGb(status.network?.rx_gb)} ↓ / ${fmtGb(status.network?.tx_gb)} ↑`;
+      $('io-value').textContent = `IO ${fmtGb(status.io?.read_gb)} 读 / ${fmtGb(status.io?.write_gb)} 写`;
+      $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时`;
+    }
+
+    function vmPill(status) {
+      const cls = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'alert';
+      return `<span class="pill ${cls}">${status || '-'}</span>`;
+    }
+
+    function renderVms() {
+      const tbody = $('vm-table');
+      tbody.innerHTML = '';
+      $('vm-empty').classList.toggle('hidden', state.vms.length > 0);
+      for (const vm of state.vms) {
+        const cpu = `${(Number(vm.cpu || 0) * 100).toFixed(1)}%`;
+        const mem = `${fmtGb((Number(vm.mem || 0) / 1_000_000_000))} / ${fmtGb((Number(vm.maxmem || 0) / 1_000_000_000))}`;
+        const net = `${fmtGb((Number(vm.netin || 0) + Number(vm.netout || 0)) / 1_000_000_000)}`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${vm.vmid}</td>
+          <td title="${vm.name || ''}">${vm.name || '-'}</td>
+          <td>${vmPill(vm.status)}</td>
+          <td>${cpu}</td>
+          <td title="${mem}">${mem}</td>
+          <td>${net}</td>
+          <td>
+            <div class="actions">
+              <button class="secondary" data-action="status" data-vmid="${vm.vmid}">状态</button>
+              <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
+              <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
+              <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">暂停</button>
+              <button class="danger" data-action="delete" data-vmid="${vm.vmid}">删除</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderImages() {
+      const select = $('image-select');
+      select.innerHTML = '';
+      for (const item of state.images) {
+        const opt = document.createElement('option');
+        opt.value = item.image;
+        opt.textContent = `${item.image} (${item.template_vmid})`;
+        select.appendChild(opt);
+      }
+      if (!state.images.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '手动 template_vmid';
+        select.appendChild(opt);
+      }
+    }
+
+    function renderIps() {
+      const tbody = $('ip-table');
+      tbody.innerHTML = '';
+      for (const ip of state.ips) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${ip.address}</td>
+          <td>${ip.cidr}</td>
+          <td>${ip.gateway}</td>
+          <td>${vmPill(ip.status)}</td>
+          <td>${ip.vmid || '-'}</td>
+          <td><button class="secondary" data-action="release-ip" data-ip="${ip.address}">释放</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadAll() {
+      if (!state.token) {
+        log('请先保存平台 Token');
+        return;
+      }
+      const [host, vms, images, ips] = await Promise.all([
+        api('/api/v1/status'),
+        api('/api/v1/vms'),
+        api('/api/v1/images'),
+        api('/api/v1/ip-pool'),
+      ]);
+      state.vms = Array.isArray(vms) ? vms.sort((a, b) => a.vmid - b.vmid) : [];
+      state.images = images || [];
+      state.ips = ips || [];
+      renderHost(host);
+      renderVms();
+      renderImages();
+      renderIps();
+      $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
+      log(host);
+    }
+
+    async function loadVmStatus(vmid) {
+      const data = await api(`/api/v1/status?vmid=${encodeURIComponent(vmid)}`);
+      log(data);
+    }
+
+    async function vmAction(action, vmid) {
+      if (action === 'status') return loadVmStatus(vmid);
+      if (action === 'console') {
+        const data = await api('/api/v1/consoles/token', {
+          method: 'POST',
+          body: JSON.stringify({ vmid: Number(vmid), ttl_seconds: 600 }),
+        });
+        window.open(data.console_url, '_blank', 'noopener');
+        log(data);
+        return;
+      }
+      if (action === 'delete') {
+        if (!confirm(`删除 VM ${vmid}?`)) return;
+        log(await api(`/api/v1/vms/${vmid}`, { method: 'DELETE' }));
+      }
+      if (action === 'start') {
+        log(await api(`/api/v1/vms/${vmid}/resume`, { method: 'POST', body: '{}' }));
+      }
+      if (action === 'stop') {
+        log(await api(`/api/v1/vms/${vmid}/pause`, { method: 'POST', body: '{}' }));
+      }
+      await loadAll();
+    }
+
+    function formValue(form, name) {
+      const value = new FormData(form).get(name);
+      return typeof value === 'string' ? value.trim() : value;
+    }
+
+    function optionalNumber(value) {
+      if (value === '' || value === null || value === undefined) return undefined;
+      return Number(value);
+    }
+
+    $('save-token').addEventListener('click', async () => {
+      state.token = $('token').value.trim();
+      localStorage.setItem('platformToken', state.token);
+      await loadAll().catch((err) => log(err.message));
+    });
+
+    $('reload').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
+    $('refresh-ips').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
+    $('open-api').addEventListener('click', () => window.open('/docs', '_blank', 'noopener'));
+    $('load-vm-status').addEventListener('click', () => {
+      const vmid = $('vmid-filter').value.trim();
+      if (vmid) loadVmStatus(vmid).catch((err) => log(err.message));
+    });
+
+    $('vm-table').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      vmAction(button.dataset.action, button.dataset.vmid).catch((err) => log(err.message));
+    });
+
+    $('ip-table').addEventListener('click', async (event) => {
+      const button = event.target.closest('button[data-action="release-ip"]');
+      if (!button) return;
+      try {
+        log(await api(`/api/v1/ip-pool/${encodeURIComponent(button.dataset.ip)}/release`, {
+          method: 'POST',
+          body: '{}',
+        }));
+        await loadAll();
+      } catch (err) {
+        log(err.message);
+      }
+    });
+
+    $('create-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const rate = optionalNumber(formValue(form, 'rate'));
+      const payload = {
+        name: formValue(form, 'name'),
+        image: formValue(form, 'image') || undefined,
+        vmid: optionalNumber(formValue(form, 'vmid')),
+        cores: optionalNumber(formValue(form, 'cores')) || 1,
+        memory_mb: optionalNumber(formValue(form, 'memory_mb')) || 1024,
+        disk_gb: optionalNumber(formValue(form, 'disk_gb')),
+        storage: formValue(form, 'storage') || undefined,
+        bridge: formValue(form, 'bridge') || undefined,
+        network: rate ? { rate } : undefined,
+        ci_user: formValue(form, 'ci_user') || undefined,
+        ci_password: formValue(form, 'ci_password') || undefined,
+        ssh_keys: formValue(form, 'ssh_keys') || undefined,
+        ip_config: formValue(form, 'ip_config') || undefined,
+        nameserver: formValue(form, 'nameserver') || undefined,
+        allocate_ip: Boolean(new FormData(form).get('allocate_ip')),
+        start: true,
+      };
+      Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
+      try {
+        log(await api('/api/v1/vms', { method: 'POST', body: JSON.stringify(payload) }));
+        await loadAll();
+      } catch (err) {
+        log(err.message);
+      }
+    });
+
+    $('ip-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const addresses = formValue(form, 'addresses')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const payload = {
+        addresses,
+        cidr: optionalNumber(formValue(form, 'cidr')) || 24,
+        gateway: formValue(form, 'gateway'),
+        nameserver: formValue(form, 'nameserver') || undefined,
+        bridge: formValue(form, 'bridge') || undefined,
+        note: formValue(form, 'note') || undefined,
+      };
+      try {
+        log(await api('/api/v1/ip-pool', { method: 'POST', body: JSON.stringify(payload) }));
+        await loadAll();
+      } catch (err) {
+        log(err.message);
+      }
+    });
+
+    if (state.token) {
+      loadAll().catch((err) => log(err.message));
+    }
+  </script>
+</body>
+</html>
