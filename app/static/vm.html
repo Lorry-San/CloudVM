@@ -308,6 +308,7 @@
             <button id="btn-config">配置</button>
             <button id="btn-paste">凭据</button>
             <button id="btn-start">开机</button>
+            <button id="btn-reinstall">重装系统</button>
             <button class="danger" id="btn-delete">删除</button>
           </div>
         </div>
@@ -615,6 +616,7 @@
         traffic_limit_disconnect: '超额断网',
         config_update: '修改配置',
         traffic_config: '流量配置',
+        reinstall: '重装系统',
         delete: '删除实例',
       }[action] || action || '-';
     }
@@ -750,6 +752,40 @@
       await load();
       return true;
     }
+    async function reinstallVm() {
+      const images = await api('/api/v1/reinstall/images');
+      const defaultImage = Array.isArray(images) && images.length ? images[0].image : '';
+      const image = prompt(`VM ${vmid} 重装镜像名`, defaultImage);
+      if (image === null) return;
+      if (!image.trim()) {
+        throw new Error('请先填写镜像名，或在 .env 配置 IMAGE_TEMPLATES');
+      }
+      const password = prompt(`VM ${vmid} 新 root 密码`);
+      if (password === null) return;
+      if (!password) {
+        throw new Error('重装必须填写 root 密码');
+      }
+      const currentDiskGb = lastStatus?.disk?.total_gb ? Math.ceil(Number(lastStatus.disk.total_gb)) : 40;
+      const diskSize = prompt(`VM ${vmid} 系统盘大小，例如 40G`, `${currentDiskGb || 40}G`);
+      if (diskSize === null) return;
+      const slot = prompt(`VM ${vmid} 系统盘槽位`, 'virtio0');
+      if (slot === null) return;
+      if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认保留。`)) return;
+      await api(`/api/v1/vms/${vmid}/reinstall`, {
+        method: 'POST',
+        body: JSON.stringify({
+          image: image.trim(),
+          slot: slot.trim() || 'virtio0',
+          disk_size: diskSize.trim() || undefined,
+          ci_user: 'root',
+          password,
+          start: true,
+          free_old: false,
+        }),
+      });
+      await load();
+      return true;
+    }
     async function apiAction(path, method = 'POST') {
       await api(path, { method, body: method === 'DELETE' ? undefined : '{}' });
     }
@@ -769,6 +805,7 @@
     $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '关机中', () => action(`/api/v1/vms/${vmid}/pause`), '关机任务已提交'));
     $('btn-net-down').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '断网中', () => action(`/api/v1/vms/${vmid}/network/disconnect`), '断网已提交'));
     $('btn-net-up').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '联网中', () => action(`/api/v1/vms/${vmid}/network/connect`), '联网已提交'));
+    $('btn-reinstall').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重装任务提交中', reinstallVm, '重装任务已提交'));
     $('btn-restart').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重启中', async () => {
       await apiAction(`/api/v1/vms/${vmid}/pause`);
       await apiAction(`/api/v1/vms/${vmid}/resume`);

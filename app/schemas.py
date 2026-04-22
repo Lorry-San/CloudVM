@@ -87,6 +87,21 @@ class VmConfigUpdateRequest(BaseModel):
     reboot: bool = True
 
 
+class VmReinstallRequest(BaseModel):
+    image: str | None = None
+    template_vmid: int | None = Field(default=None, ge=1)
+    slot: str | None = Field(default=None, description="Target disk slot, usually virtio0.")
+    template_slot: str | None = None
+    storage: str | None = None
+    disk_size: str | None = Field(default=None, description="Final disk size, for example 40G.")
+    ci_user: str | None = None
+    password: str | None = None
+    nameserver: str | None = None
+    start: bool = True
+    free_old: bool = False
+    dry_run: bool = False
+
+
 class VmTrafficConfigRequest(BaseModel):
     quota_gb: float | None = Field(default=None, gt=0)
     reset_day: int = Field(default=1, ge=1, le=28)

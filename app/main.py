@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
@@ -32,6 +32,7 @@ from app.ip_pool import (
 )
 from app.metrics import list_metric_samples, record_metric_sample
 from app.pve_api import PveApi, PveApiError
+from app.reinstall import ReinstallError, resolve_reinstall_template_vmid, run_reinstall
 from app.schemas import (
     ConsoleSessionResponse,
     ConsoleTokenRequest,
@@ -45,6 +46,7 @@ from app.schemas import (
     VmConfigUpdateRequest,
     VmCreateRequest,
     VmExpirationRequest,
+    VmReinstallRequest,
     VmTrafficConfigRequest,
     VmTrafficConfigResponse,
 )
@@ -437,6 +439,17 @@ async def list_images(
     ]
 
 
+@app.get(
+    "/api/v1/reinstall/images",
+    response_model=list[ImageTemplateResponse],
+    dependencies=[Depends(require_api_token)],
+)
+async def list_reinstall_images(
+    settings: Settings = Depends(get_settings),
+) -> list[ImageTemplateResponse]:
+    return await list_images(settings)
+
+
 @app.post(
     "/api/v1/vms",
     response_model=VmActionResponse,
@@ -616,6 +629,53 @@ async def update_vm_config(
         )
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/v1/vms/{vmid}/reinstall",
+    response_model=VmActionResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def reinstall_vm(
+    vmid: int,
+    req: VmReinstallRequest,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings),
+) -> VmActionResponse:
+    try:
+        template_vmid = resolve_reinstall_template_vmid(req.image, req.template_vmid, settings)
+    except ReinstallError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    task_id = f"reinstall-{vmid}-{int(time.time())}"
+    record_task_log(
+        settings,
+        vmid,
+        "reinstall",
+        status="queued",
+        task_id=task_id,
+        message=f"template={template_vmid} image={req.image or '-'}",
+    )
+    background_tasks.add_task(
+        run_reinstall,
+        settings,
+        vmid,
+        template_vmid,
+        slot=req.slot,
+        template_slot=req.template_slot,
+        storage=req.storage,
+        disk_size=req.disk_size,
+        ci_user=req.ci_user,
+        password=req.password,
+        nameserver=req.nameserver,
+        start=req.start,
+        free_old=req.free_old,
+        dry_run=req.dry_run,
+        task_id=task_id,
+    )
+    if req.ci_user or req.password:
+        save_vm_credentials(settings, vmid, req.ci_user or "root", req.password)
+    return VmActionResponse(vmid=vmid, task=task_id, status="reinstall_queued")
 
 
 @app.get(
