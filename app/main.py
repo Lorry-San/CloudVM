@@ -50,6 +50,7 @@ from app.schemas import (
 )
 from app.security import require_api_token
 from app.status import normalize_node_status, normalize_vm_status, vm_tap_traffic
+from app.tasks import list_task_logs, record_task_log
 from app.traffic import get_vm_traffic_usage, set_vm_traffic_config
 
 app = FastAPI(
@@ -466,6 +467,13 @@ async def create_vm(
                     timezone=req.traffic_reset_timezone,
                 ),
             )
+        record_task_log(
+            settings,
+            vmid,
+            "create",
+            task_id=start_task or task,
+            message=f"name={req.name}",
+        )
         return VmActionResponse(
             vmid=vmid,
             task=task,
@@ -536,6 +544,13 @@ async def update_vm_config(
             status = await client.vm_status(settings.pve_node, vmid)
             if str(status.get("status")) == "running":
                 reboot_task = await client.vm_action(settings.pve_node, vmid, "reboot")
+        record_task_log(
+            settings,
+            vmid,
+            "config_update",
+            task_id=reboot_task or task,
+            message=",".join(sorted(data.keys())),
+        )
         return VmActionResponse(
             vmid=vmid,
             task=task,
@@ -576,7 +591,14 @@ async def update_vm_traffic_config(
 ) -> dict[str, object]:
     try:
         status = await collect_status_snapshot(vmid, client, settings)
-        return set_vm_traffic_config(settings, vmid, req, status)
+        result = set_vm_traffic_config(settings, vmid, req, status)
+        record_task_log(
+            settings,
+            vmid,
+            "traffic_config",
+            message=f"quota={req.quota_gb}, reset={req.reset_day} {req.reset_hour}:00",
+        )
+        return result
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -632,6 +654,18 @@ async def get_metric_history(
     return list_metric_samples(settings, vmid, hours)
 
 
+@app.get(
+    "/api/v1/vms/{vmid}/tasks",
+    dependencies=[Depends(require_api_token)],
+)
+async def get_vm_task_logs(
+    vmid: int,
+    limit: int = 50,
+    settings: Settings = Depends(get_settings),
+) -> list[dict[str, object]]:
+    return list_task_logs(settings, vmid, limit)
+
+
 @app.post(
     "/api/v1/vms/{vmid}/pause",
     response_model=VmActionResponse,
@@ -644,6 +678,7 @@ async def pause_vm(
 ) -> VmActionResponse:
     try:
         task = await client.vm_action(settings.pve_node, vmid, "stop")
+        record_task_log(settings, vmid, "stop", task_id=task)
         return VmActionResponse(vmid=vmid, task=task)
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -669,6 +704,7 @@ async def disconnect_vm_network(
             vmid,
             {"net0": set_net_link_down(net0, True)},
         )
+        record_task_log(settings, vmid, "network_disconnect", task_id=task)
         return VmActionResponse(vmid=vmid, task=task, status="network_disconnected")
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -694,6 +730,7 @@ async def connect_vm_network(
             vmid,
             {"net0": set_net_link_down(net0, False)},
         )
+        record_task_log(settings, vmid, "network_connect", task_id=task)
         return VmActionResponse(vmid=vmid, task=task, status="network_connected")
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -711,6 +748,7 @@ async def resume_vm(
 ) -> VmActionResponse:
     try:
         task = await client.vm_action(settings.pve_node, vmid, "start")
+        record_task_log(settings, vmid, "start", task_id=task)
         return VmActionResponse(vmid=vmid, task=task)
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -735,6 +773,7 @@ async def delete_vm(
         released = release_ip_by_vmid(settings, vmid)
         delete_network_snippet(settings, vmid)
         delete_vm_credentials(settings, vmid)
+        record_task_log(settings, vmid, "delete", task_id=task)
         return VmActionResponse(
             vmid=vmid,
             task=task,

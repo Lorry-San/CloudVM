@@ -64,6 +64,19 @@ CREATE TABLE IF NOT EXISTS vm_traffic_configs (
     baseline_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS vm_task_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vmid INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ok',
+    task_id TEXT,
+    message TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_vm_task_logs_vmid_time
+    ON vm_task_logs(vmid, created_at);
 """
 
 

@@ -385,7 +385,7 @@
         <div class="card-head"><span>任务</span><a class="muted">更多</a></div>
         <table>
           <thead><tr><th>状态</th><th>ID</th><th>任务类型</th><th>开始时间</th><th>进度</th></tr></thead>
-          <tbody><tr><td><span class="pill running"><span class="dot"></span>正常</span></td><td>__VMID__</td><td>实例状态刷新</td><td id="task-time">-</td><td>100%</td></tr></tbody>
+          <tbody id="task-table"><tr><td colspan="5" class="muted">暂无任务记录</td></tr></tbody>
         </table>
       </div>
 
@@ -592,14 +592,45 @@
       }
     }
     async function load() {
-      const [status, vmRaw, ips, history] = await Promise.all([
+      const [status, vmRaw, ips, history, tasks] = await Promise.all([
         api(`/api/v1/status?vmid=${vmid}`),
         api(`/api/v1/vms/${vmid}`),
         api(`/api/v1/vms/${vmid}/ips`),
         api(`/api/v1/metrics/history?vmid=${vmid}&hours=24`),
+        api(`/api/v1/vms/${vmid}/tasks?limit=30`),
       ]);
       vmSamples = metricSamplesFromHistory(history);
       render(status, vmRaw, Array.isArray(ips) ? ips : []);
+      renderTasks(Array.isArray(tasks) ? tasks : []);
+    }
+    function taskName(action) {
+      return {
+        create: '创建实例',
+        start: '开机',
+        stop: '关机',
+        reboot: '重启',
+        network_disconnect: '断网',
+        network_connect: '联网',
+        config_update: '修改配置',
+        traffic_config: '流量配置',
+        delete: '删除实例',
+      }[action] || action || '-';
+    }
+    function renderTasks(tasks) {
+      const tbody = $('task-table');
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无任务记录</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map((task) => `
+        <tr>
+          <td><span class="pill ${task.status === 'ok' ? 'running' : 'alert'}"><span class="dot"></span>${task.status || '-'}</span></td>
+          <td>${task.id}</td>
+          <td title="${task.message || ''}">${taskName(task.action)}</td>
+          <td>${fmtDate(task.created_at)}</td>
+          <td>${task.task_id ? '已提交' : '完成'}</td>
+        </tr>
+      `).join('');
     }
     function render(status, vmRaw, ips) {
       lastStatus = status;
@@ -616,7 +647,6 @@
       $('info-node').textContent = status.node || '-';
       $('info-disk').textContent = `${gb(status.disk?.used_gb)} / ${gb(status.disk?.total_gb)}`;
       $('info-traffic').textContent = `${gb(status.network?.tap_traffic?.total_gb)} total`;
-      $('task-time').textContent = new Date().toLocaleString();
       const rx = status.network?.tap_traffic?.rx_gb || status.network?.netin_gb || 0;
       const tx = status.network?.tap_traffic?.tx_gb || status.network?.netout_gb || 0;
       const total = Number(rx) + Number(tx);
