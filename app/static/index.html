@@ -250,6 +250,31 @@
       color: var(--muted);
       text-align: center;
     }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, .22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.error { background: #7f1d1d; }
+    .toast.ok { background: #064e3b; }
     .hidden { display: none !important; }
     .login {
       min-height: 100vh;
@@ -344,6 +369,7 @@
       <div class="statusline" id="login-error"></div>
     </div>
   </section>
+  <div class="toast" id="toast"></div>
 
   <div class="shell hidden" id="app-view">
     <aside class="side">
@@ -509,6 +535,7 @@
     };
     localStorage.removeItem('platformToken');
     $('login-token').value = state.token;
+    let toastTimer = null;
 
     function headers() {
       return {
@@ -519,6 +546,46 @@
 
     function log(value) {
       $('detail-log').textContent = typeof value === 'string' ? value : safeSummary(value);
+    }
+
+    function notify(message, type = '') {
+      const toast = $('toast');
+      toast.textContent = message || '-';
+      toast.className = `toast show ${type}`.trim();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.className = 'toast';
+      }, type === 'error' ? 5200 : 2600);
+    }
+
+    function setBusy(button, busy, label = '处理中') {
+      if (!button) return;
+      if (busy) {
+        button.dataset.originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+      } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || button.textContent;
+        delete button.dataset.originalText;
+      }
+    }
+
+    async function runWithFeedback(button, pending, work, done = '操作完成') {
+      setBusy(button, true, pending);
+      notify(pending);
+      try {
+        const result = await work();
+        notify(done, 'ok');
+        return result;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        notify(message, 'error');
+        log(message);
+        return null;
+      } finally {
+        setBusy(button, false);
+      }
     }
 
     function safeSummary(value) {
@@ -688,7 +755,10 @@
       renderImages();
       renderIps();
       $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
-      if (hostResult.status === 'fulfilled') log('已刷新');
+      if (hostResult.status === 'fulfilled') {
+        log('已刷新');
+        notify('数据已刷新', 'ok');
+      }
     }
 
     function showApp() {
@@ -731,12 +801,14 @@
     async function loadVmStatus(vmid) {
       const data = await api(`/api/v1/status?vmid=${encodeURIComponent(vmid)}`);
       log(data);
+      notify(`VM ${vmid} 状态已更新`, 'ok');
     }
 
     async function vmAction(action, vmid) {
       if (action === 'status') return loadVmStatus(vmid);
       if (action === 'detail') {
         window.open(`/vm/${encodeURIComponent(vmid)}`, '_blank', 'noopener');
+        notify(`已打开 VM ${vmid} 详情`, 'ok');
         return;
       }
       if (action === 'credentials') {
@@ -751,6 +823,7 @@
             password: password || null,
           }),
         }));
+        notify(`VM ${vmid} 凭据已保存`, 'ok');
         return;
       }
       if (action === 'console') {
@@ -760,17 +833,21 @@
         });
         window.open(data.console_url, '_blank', 'noopener');
         log(`VNC 链接已生成\nVMID: ${vmid}\n有效期: ${data.expires_at || '-'}`);
+        notify(`VM ${vmid} VNC 已打开`, 'ok');
         return;
       }
       if (action === 'delete') {
         if (!confirm(`删除 VM ${vmid}?`)) return;
         log(await api(`/api/v1/vms/${vmid}`, { method: 'DELETE' }));
+        notify(`VM ${vmid} 删除任务已提交`, 'ok');
       }
       if (action === 'start') {
         log(await api(`/api/v1/vms/${vmid}/resume`, { method: 'POST', body: '{}' }));
+        notify(`VM ${vmid} 启动任务已提交`, 'ok');
       }
       if (action === 'stop') {
         log(await api(`/api/v1/vms/${vmid}/pause`, { method: 'POST', body: '{}' }));
+        notify(`VM ${vmid} 暂停任务已提交`, 'ok');
       }
       await loadAll();
     }
@@ -795,36 +872,40 @@
       showLogin('已退出');
     });
 
-    $('reload').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
-    $('refresh-ips').addEventListener('click', () => loadAll().catch((err) => log(err.message)));
-    $('load-vm-status').addEventListener('click', () => {
+    $('reload').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新中', loadAll, '刷新完成'));
+    $('refresh-ips').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新 IP 池中', loadAll, 'IP 池已刷新'));
+    $('load-vm-status').addEventListener('click', (event) => {
       const vmid = $('vmid-filter').value.trim();
-      if (vmid) loadVmStatus(vmid).catch((err) => log(err.message));
+      if (!vmid) {
+        notify('请输入 VMID', 'error');
+        return;
+      }
+      runWithFeedback(event.currentTarget, '查询中', () => loadVmStatus(vmid), '查询完成');
     });
 
     $('vm-table').addEventListener('click', (event) => {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
-      vmAction(button.dataset.action, button.dataset.vmid).catch((err) => log(err.message));
+      const label = button.textContent.trim() || '操作';
+      runWithFeedback(button, `${label}中`, () => vmAction(button.dataset.action, button.dataset.vmid), `${label}完成`);
     });
 
     $('ip-table').addEventListener('click', async (event) => {
       const button = event.target.closest('button[data-action="release-ip"]');
       if (!button) return;
-      try {
+      runWithFeedback(button, '释放中', async () => {
         log(await api(`/api/v1/ip-pool/${encodeURIComponent(button.dataset.ip)}/release`, {
           method: 'POST',
           body: '{}',
         }));
         await loadAll();
-      } catch (err) {
-        log(err.message);
-      }
+      }, 'IP 已释放');
     });
 
     $('create-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
       const rate = optionalNumber(formValue(form, 'rate'));
       const payload = {
         name: formValue(form, 'name'),
@@ -845,17 +926,16 @@
         start: true,
       };
       Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
-      try {
+      await runWithFeedback(button, '创建中', async () => {
         log(await api('/api/v1/vms', { method: 'POST', body: JSON.stringify(payload) }));
         await loadAll();
-      } catch (err) {
-        log(err.message);
-      }
+      }, '创建任务已提交');
     });
 
     $('ip-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
       const addresses = formValue(form, 'addresses')
         .split(',')
         .map((item) => item.trim())
@@ -868,12 +948,10 @@
         bridge: formValue(form, 'bridge') || undefined,
         note: formValue(form, 'note') || undefined,
       };
-      try {
+      await runWithFeedback(button, '加入 IP 池中', async () => {
         log(await api('/api/v1/ip-pool', { method: 'POST', body: JSON.stringify(payload) }));
         await loadAll();
-      } catch (err) {
-        log(err.message);
-      }
+      }, 'IP 池已更新');
     });
 
     if (state.token) {

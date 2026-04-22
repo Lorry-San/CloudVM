@@ -156,6 +156,31 @@
     .stopped .dot { background: #9ca3af; }
     .alert .dot { background: #f59e0b; }
     .muted { color: var(--muted); }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, .22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.error { background: #7f1d1d; }
+    .toast.ok { background: #064e3b; }
     .login {
       min-height: calc(100vh - 62px);
       display: grid;
@@ -269,14 +294,14 @@
 
       <div>
         <div class="card">
-          <div class="card-head"><span>弹性IP</span><button class="secondary">＋</button></div>
+          <div class="card-head"><span>弹性IP</span><button class="secondary" data-not-ready="弹性 IP 添加暂未接后端接口，请先在控制台 IP 池管理">＋</button></div>
           <table>
             <thead><tr><th>ID</th><th>IP地址</th><th>进带宽</th><th>出带宽</th><th>管理</th></tr></thead>
             <tbody id="ip-table"></tbody>
           </table>
         </div>
         <div class="card" style="margin-top:20px">
-          <div class="card-head"><span>网络管理</span><button class="secondary">＋</button></div>
+          <div class="card-head"><span>网络管理</span><button class="secondary" data-not-ready="网卡新增暂未接后端接口">＋</button></div>
           <table>
             <thead><tr><th>IP/MAC</th><th>网络名称</th><th>网络类型/vlan</th><th>驱动</th><th>管理</th></tr></thead>
             <tbody id="network-table"></tbody>
@@ -285,12 +310,14 @@
       </div>
     </section>
   </main>
+  <div class="toast" id="toast"></div>
 
   <script>
     const vmid = Number("__VMID__");
     const $ = (id) => document.getElementById(id);
     let token = sessionStorage.getItem('platformToken') || '';
     localStorage.removeItem('platformToken');
+    let toastTimer = null;
 
     function headers() {
       return { 'Content-Type': 'application/json', 'X-API-Token': token };
@@ -302,6 +329,43 @@
       try { data = text ? JSON.parse(text) : null; } catch { data = text; }
       if (!res.ok) throw new Error(data && data.detail ? data.detail : text);
       return data;
+    }
+    function notify(message, type = '') {
+      const toast = $('toast');
+      toast.textContent = message || '-';
+      toast.className = `toast show ${type}`.trim();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.className = 'toast';
+      }, type === 'error' ? 5200 : 2600);
+    }
+    function setBusy(button, busy, label = '处理中') {
+      if (!button) return;
+      if (busy) {
+        button.dataset.originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+      } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || button.textContent;
+        delete button.dataset.originalText;
+      }
+    }
+    async function runWithFeedback(button, pending, work, done = '操作完成') {
+      setBusy(button, true, pending);
+      notify(pending);
+      try {
+        const result = await work();
+        notify(done, 'ok');
+        return result;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        notify(message, 'error');
+        showError(message);
+        return null;
+      } finally {
+        setBusy(button, false);
+      }
     }
     function gb(value) {
       const n = Number(value || 0);
@@ -328,6 +392,7 @@
     function showError(message) {
       $('vm-subtitle').textContent = message || '加载失败';
       $('info-status').textContent = message || '加载失败';
+      notify(message || '加载失败', 'error');
     }
     async function login() {
       token = $('token').value.trim();
@@ -337,6 +402,7 @@
         await api('/api/v1/auth/check');
         showApp();
         await load();
+        notify('登录成功', 'ok');
       } catch (err) {
         sessionStorage.removeItem('platformToken');
         showLogin(err.message);
@@ -374,12 +440,13 @@
         ['04月22号至今', rx, tx, total],
       ];
       $('traffic-table').innerHTML = rows.map((row) => `<tr><td>${row[0]}</td><td>${mbFromGb(row[1])}</td><td>${mbFromGb(row[2])}</td><td>${mbFromGb(row[3])}</td><td>0.01%</td></tr>`).join('');
-      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
-      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>${ips[0]?.bridge || '-'}</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary">编辑</button></td></tr>`;
+      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary" data-not-ready="单 VM 弹性 IP 管理暂未接后端接口，请先在控制台 IP 池管理">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
+      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>${ips[0]?.bridge || '-'}</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary" data-not-ready="网卡编辑暂未接后端接口">编辑</button></td></tr>`;
     }
     async function openConsole() {
       const data = await api('/api/v1/consoles/token', { method: 'POST', body: JSON.stringify({ vmid, ttl_seconds: 600 }) });
       window.open(data.console_url, '_blank', 'noopener');
+      return data;
     }
     async function saveCred() {
       const username = prompt(`VM ${vmid} 用户名，可留空`);
@@ -387,7 +454,7 @@
       const password = prompt(`VM ${vmid} 密码，可留空`);
       if (password === null) return;
       await api(`/api/v1/vms/${vmid}/credentials`, { method: 'PUT', body: JSON.stringify({ username: username || null, password: password || null }) });
-      alert('已保存');
+      return true;
     }
     async function apiAction(path, method = 'POST') {
       await api(path, { method, body: method === 'DELETE' ? undefined : '{}' });
@@ -398,22 +465,32 @@
     }
     $('login').addEventListener('click', login);
     $('token').addEventListener('keydown', (event) => { if (event.key === 'Enter') login(); });
-    $('refresh').addEventListener('click', load);
-    $('traffic-refresh').addEventListener('click', load);
-    $('btn-console').addEventListener('click', openConsole);
-    $('btn-paste').addEventListener('click', saveCred);
-    $('btn-cred').addEventListener('click', saveCred);
-    $('btn-start').addEventListener('click', () => action(`/api/v1/vms/${vmid}/resume`));
-    $('btn-stop').addEventListener('click', () => action(`/api/v1/vms/${vmid}/pause`));
-    $('btn-restart').addEventListener('click', async () => {
+    $('refresh').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新中', load, '刷新完成'));
+    $('traffic-refresh').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新流量中', load, '流量已刷新'));
+    $('btn-console').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '打开 VNC 中', openConsole, 'VNC 已打开'));
+    $('btn-paste').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
+    $('btn-cred').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
+    $('btn-start').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '开机中', () => action(`/api/v1/vms/${vmid}/resume`), '开机任务已提交'));
+    $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '暂停中', () => action(`/api/v1/vms/${vmid}/pause`), '暂停任务已提交'));
+    $('btn-restart').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重启中', async () => {
       await apiAction(`/api/v1/vms/${vmid}/pause`);
       await apiAction(`/api/v1/vms/${vmid}/resume`);
       await load();
+    }, '重启任务已提交'));
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-not-ready]');
+      if (!button) return;
+      notify(button.dataset.notReady, 'error');
     });
     $('btn-delete').addEventListener('click', async () => {
       if (!confirm(`删除 VM ${vmid}?`)) return;
-      await action(`/api/v1/vms/${vmid}`, 'DELETE');
-      location.href = '/';
+      const result = await runWithFeedback(
+        $('btn-delete'),
+        '删除中',
+        () => apiAction(`/api/v1/vms/${vmid}`, 'DELETE'),
+        '删除任务已提交',
+      );
+      if (result !== null) location.href = '/';
     });
     if (token) {
       showApp();
