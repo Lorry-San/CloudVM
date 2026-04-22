@@ -42,11 +42,15 @@ from app.schemas import (
     VmCredentialsRequest,
     VmCredentialsResponse,
     VmActionResponse,
+    VmConfigUpdateRequest,
     VmCreateRequest,
     VmExpirationRequest,
+    VmTrafficConfigRequest,
+    VmTrafficConfigResponse,
 )
 from app.security import require_api_token
 from app.status import normalize_node_status, normalize_vm_status, vm_tap_traffic
+from app.traffic import get_vm_traffic_usage, set_vm_traffic_config
 
 app = FastAPI(
     title="PVETrafficManager Platform API",
@@ -283,6 +287,17 @@ def set_net_link_down(net_config: str, link_down: bool) -> str:
     return ",".join(parts)
 
 
+def set_net_rate(net_config: str, rate: float | None) -> str:
+    parts = [
+        part
+        for part in str(net_config).split(",")
+        if part and not part.startswith("rate=")
+    ]
+    if rate is not None:
+        parts.append(f"rate={rate}")
+    return ",".join(parts)
+
+
 def detect_primary_disk(config: dict[str, object]) -> str:
     for disk in ("scsi0", "virtio0", "sata0", "ide0"):
         value = str(config.get(disk, ""))
@@ -440,6 +455,17 @@ async def create_vm(
         if req.start:
             start_task = await client.vm_action(settings.pve_node, vmid, "start")
         save_vm_credentials(settings, vmid, req.ci_user, req.ci_password)
+        if req.traffic_limit_gb:
+            set_vm_traffic_config(
+                settings,
+                vmid,
+                VmTrafficConfigRequest(
+                    quota_gb=req.traffic_limit_gb,
+                    reset_day=req.traffic_reset_day,
+                    reset_hour=req.traffic_reset_hour,
+                    timezone=req.traffic_reset_timezone,
+                ),
+            )
         return VmActionResponse(
             vmid=vmid,
             task=task,
@@ -479,6 +505,72 @@ async def get_vm(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.put(
+    "/api/v1/vms/{vmid}/config",
+    response_model=VmActionResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def update_vm_config(
+    vmid: int,
+    req: VmConfigUpdateRequest,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> VmActionResponse:
+    data: dict[str, object] = {}
+    if req.cores is not None:
+        data["cores"] = req.cores
+    if req.memory_mb is not None:
+        data["memory"] = req.memory_mb
+    try:
+        if req.network_rate is not None:
+            config = await client.vm_config(settings.pve_node, vmid)
+            net0 = str(config.get("net0") or "")
+            if not net0:
+                raise HTTPException(status_code=404, detail="VM net0 does not exist")
+            data["net0"] = set_net_rate(net0, req.network_rate)
+        if not data:
+            raise HTTPException(status_code=400, detail="No config changes provided")
+        task = await client.set_vm_config(settings.pve_node, vmid, data)
+        return VmActionResponse(vmid=vmid, task=task, status="config_updated")
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/v1/vms/{vmid}/traffic",
+    response_model=VmTrafficConfigResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def get_vm_traffic_config(
+    vmid: int,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    try:
+        status = await collect_status_snapshot(vmid, client, settings)
+        return get_vm_traffic_usage(settings, vmid, status)
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.put(
+    "/api/v1/vms/{vmid}/traffic",
+    response_model=VmTrafficConfigResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def update_vm_traffic_config(
+    vmid: int,
+    req: VmTrafficConfigRequest,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    try:
+        status = await collect_status_snapshot(vmid, client, settings)
+        return set_vm_traffic_config(settings, vmid, req, status)
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 async def build_status_response(
     vmid: int | None,
     client: PveApi,
@@ -486,6 +578,8 @@ async def build_status_response(
 ) -> dict[str, object]:
     try:
         status = await collect_status_snapshot(vmid, client, settings)
+        if vmid is not None:
+            status["traffic_billing"] = get_vm_traffic_usage(settings, vmid, status)
         record_metric_sample(settings, status)
         return status
     except PveApiError as exc:

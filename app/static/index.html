@@ -566,6 +566,9 @@
               <label>存储<input name="storage" placeholder="默认"></label>
               <label>网桥<input name="bridge" placeholder="vmbr0"></label>
               <label>端口速率<input name="rate" type="number" step="0.1" placeholder="不限制"></label>
+              <label>流量额度 GB<input name="traffic_limit_gb" type="number" min="1" step="1" placeholder="不限制"></label>
+              <label>重置日<input name="traffic_reset_day" type="number" min="1" max="28" value="1"></label>
+              <label>重置小时<input name="traffic_reset_hour" type="number" min="0" max="23" value="0"></label>
               <label>系统用户<input name="ci_user" placeholder="可留空"></label>
               <label>系统密码<input name="ci_password" type="password" autocomplete="new-password" placeholder="可留空"></label>
               <label>DNS<input name="nameserver" placeholder="可留空"></label>
@@ -880,6 +883,7 @@
             <div class="actions">
               <button class="secondary" data-action="detail" data-vmid="${vm.vmid}">状态</button>
               <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
+              <button class="secondary" data-action="config" data-vmid="${vm.vmid}">配置</button>
               <button class="secondary" data-action="credentials" data-vmid="${vm.vmid}">凭据</button>
               <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
               <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">关机</button>
@@ -1027,6 +1031,47 @@
         notify(`VM ${vmid} 凭据已保存`, 'ok');
         return;
       }
+      if (action === 'config') {
+        const vm = state.vms.find((item) => String(item.vmid) === String(vmid)) || {};
+        const cores = prompt(`VM ${vmid} CPU 核心，留空不改`, vm.cpus || '');
+        if (cores === null) return;
+        const memory = prompt(`VM ${vmid} 内存 MB，留空不改`, vm.maxmem ? Math.round(Number(vm.maxmem) / 1024 / 1024) : '');
+        if (memory === null) return;
+        const rate = prompt(`VM ${vmid} 端口速率，留空不改`, '');
+        if (rate === null) return;
+        const quota = prompt(`VM ${vmid} 流量额度 GB，留空不改`, '');
+        if (quota === null) return;
+        const resetDay = prompt('每月几号重置流量，1-28', '1');
+        if (resetDay === null) return;
+        const resetHour = prompt('几点重置流量，0-23', '0');
+        if (resetHour === null) return;
+        const configPayload = {
+          cores: optionalNumber(cores),
+          memory_mb: optionalNumber(memory),
+          network_rate: optionalNumber(rate),
+        };
+        Object.keys(configPayload).forEach((key) => configPayload[key] === undefined && delete configPayload[key]);
+        if (Object.keys(configPayload).length) {
+          log(await api(`/api/v1/vms/${vmid}/config`, {
+            method: 'PUT',
+            body: JSON.stringify(configPayload),
+          }));
+        }
+        if (quota !== '') {
+          log(await api(`/api/v1/vms/${vmid}/traffic`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              quota_gb: optionalNumber(quota),
+              reset_day: optionalNumber(resetDay) || 1,
+              reset_hour: optionalNumber(resetHour) || 0,
+              timezone: 'Asia/Shanghai',
+            }),
+          }));
+        }
+        notify(`VM ${vmid} 配置已提交`, 'ok');
+        await loadAll();
+        return;
+      }
       if (action === 'console') {
         const data = await api('/api/v1/consoles/token', {
           method: 'POST',
@@ -1151,6 +1196,10 @@
         storage: formValue(form, 'storage') || undefined,
         bridge: formValue(form, 'bridge') || undefined,
         network: rate ? { rate } : undefined,
+        traffic_limit_gb: optionalNumber(formValue(form, 'traffic_limit_gb')),
+        traffic_reset_day: optionalNumber(formValue(form, 'traffic_reset_day')) || 1,
+        traffic_reset_hour: optionalNumber(formValue(form, 'traffic_reset_hour')) || 0,
+        traffic_reset_timezone: 'Asia/Shanghai',
         ci_user: formValue(form, 'ci_user') || undefined,
         ci_password: formValue(form, 'ci_password') || undefined,
         ssh_keys: formValue(form, 'ssh_keys') || undefined,

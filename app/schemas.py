@@ -44,6 +44,9 @@ class VmCreateRequest(BaseModel):
     owner: str | None = None
     expires_at: datetime | None = None
     traffic_limit_gb: float | None = Field(default=None, gt=0)
+    traffic_reset_day: int = Field(default=1, ge=1, le=28)
+    traffic_reset_hour: int = Field(default=0, ge=0, le=23)
+    traffic_reset_timezone: str = "Asia/Shanghai"
     start: bool = True
 
 
@@ -75,6 +78,32 @@ class VmCredentialsResponse(BaseModel):
     vmid: int
     username_saved: bool
     password_saved: bool
+
+
+class VmConfigUpdateRequest(BaseModel):
+    cores: int | None = Field(default=None, ge=1)
+    memory_mb: int | None = Field(default=None, ge=256)
+    network_rate: float | None = Field(default=None, gt=0)
+
+
+class VmTrafficConfigRequest(BaseModel):
+    quota_gb: float | None = Field(default=None, gt=0)
+    reset_day: int = Field(default=1, ge=1, le=28)
+    reset_hour: int = Field(default=0, ge=0, le=23)
+    timezone: str = "Asia/Shanghai"
+
+
+class VmTrafficConfigResponse(BaseModel):
+    vmid: int
+    quota_gb: float | None = None
+    reset_day: int
+    reset_hour: int
+    timezone: str
+    used_gb: float = 0
+    remaining_gb: float | None = None
+    percent: float | None = None
+    next_reset_at: datetime
+    baseline_at: datetime | None = None
 
 
 class ConsoleSessionResponse(BaseModel):

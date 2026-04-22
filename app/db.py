@@ -52,6 +52,18 @@ CREATE INDEX IF NOT EXISTS idx_metric_samples_scope_time
     ON metric_samples(scope, sampled_at);
 CREATE INDEX IF NOT EXISTS idx_metric_samples_vmid_time
     ON metric_samples(vmid, sampled_at);
+
+CREATE TABLE IF NOT EXISTS vm_traffic_configs (
+    vmid INTEGER PRIMARY KEY,
+    quota_gb REAL,
+    reset_day INTEGER NOT NULL DEFAULT 1,
+    reset_hour INTEGER NOT NULL DEFAULT 0,
+    timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+    baseline_rx_bytes INTEGER NOT NULL DEFAULT 0,
+    baseline_tx_bytes INTEGER NOT NULL DEFAULT 0,
+    baseline_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
