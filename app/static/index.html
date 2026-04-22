@@ -207,18 +207,35 @@
       margin-bottom: 14px;
       font-weight: 750;
     }
-    .chart-tabs span {
+    .chart-tabs button {
       height: 34px;
-      display: inline-flex;
-      align-items: center;
+      min-height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
       color: var(--ink);
+      font-weight: 750;
     }
-    .chart-tabs span:first-child {
+    .chart-tabs button.active {
       color: var(--blue);
       border-bottom: 2px solid var(--blue);
     }
+    .chart-range {
+      width: min(390px, 100%);
+      min-height: 30px;
+      margin: 6px auto 14px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: #475467;
+      font-size: 13px;
+    }
     .chart-box {
-      min-height: 210px;
+      min-height: 300px;
       border-radius: 6px;
       background:
         repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e5e7eb 40px),
@@ -227,8 +244,22 @@
     }
     .chart-box svg {
       width: 100%;
-      height: 210px;
+      height: 300px;
       display: block;
+    }
+    .chart-tip {
+      position: fixed;
+      z-index: 80;
+      display: none;
+      padding: 9px 10px;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      color: var(--ink);
+      font-size: 13px;
+      pointer-events: none;
+      white-space: pre-wrap;
     }
     .bar {
       height: 8px;
@@ -470,14 +501,15 @@
       </section>
 
       <section class="card overview-chart">
-        <div class="chart-tabs">
-          <span>CPU 使用量</span>
-          <span>硬盘IO</span>
-          <span>内存用量</span>
-          <span>网卡</span>
-          <span>用量排行</span>
-          <span>显卡占用率</span>
+        <div class="chart-tabs" id="overview-tabs">
+          <button class="active" data-chart="cpu" type="button">CPU 使用量</button>
+          <button data-chart="io" type="button">硬盘IO</button>
+          <button data-chart="memory" type="button">内存用量</button>
+          <button data-chart="network" type="button">网卡</button>
+          <button data-chart="traffic" type="button">用量排行</button>
+          <button data-chart="gpu" type="button">显卡占用率</button>
         </div>
+        <div class="chart-range" id="overview-range">-</div>
         <div class="chart-box" id="overview-chart"></div>
       </section>
 
@@ -584,6 +616,7 @@
       </section>
     </main>
   </div>
+  <div class="chart-tip" id="chart-tip"></div>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -592,6 +625,8 @@
       vms: [],
       images: [],
       ips: [],
+      hostSamples: [],
+      activeChart: 'cpu',
     };
     localStorage.removeItem('platformToken');
     $('login-token').value = state.token;
@@ -681,6 +716,13 @@
       return `${num.toFixed(2)} GB`;
     }
 
+    function fmtMetric(value, unit) {
+      const num = Number(value || 0);
+      if (unit === '%') return `${num.toFixed(2)} %`;
+      if (unit === 'GB') return fmtGb(num);
+      return `${num.toFixed(2)} ${unit}`;
+    }
+
     function pct(used, total) {
       if (!total) return 0;
       return Math.max(0, Math.min(100, (Number(used) / Number(total)) * 100));
@@ -722,19 +764,66 @@
       $('traffic-value').textContent = fmtGb(rx + tx);
       $('traffic-sub').textContent = '累计流量';
       $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时`;
-      renderOverviewChart(cpu, memPct, diskPct);
+      addHostSample(status, { cpu, memPct, diskPct, rx, tx });
+      renderOverviewChart();
     }
 
-    function renderOverviewChart(cpu, mem, disk) {
-      const base = [2, 3, 2, 4, 3, Math.max(4, cpu), 6, Math.max(5, mem / 3), 3, Math.max(4, disk / 4), 5, 4];
-      const points = base.map((value, index) => {
-        const x = 28 + index * 76;
-        const y = 190 - Math.min(100, value) * 1.55;
-        return `${x},${y}`;
-      }).join(' ');
+    function addHostSample(status, values) {
+      const now = new Date();
+      state.hostSamples.push({
+        time: now,
+        cpu: values.cpu,
+        io: Number(status.io?.read_gb || 0) + Number(status.io?.write_gb || 0),
+        memory: values.memPct,
+        network: values.rx + values.tx,
+        traffic: values.rx + values.tx,
+        gpu: 0,
+      });
+      state.hostSamples = state.hostSamples.slice(-60);
+    }
+
+    function chartMeta(key) {
+      return {
+        cpu: ['CPU 使用率(%)', '%', 100],
+        io: ['硬盘IO(GB)', 'GB', null],
+        memory: ['内存用量(%)', '%', 100],
+        network: ['网卡流量(GB)', 'GB', null],
+        traffic: ['总流量(GB)', 'GB', null],
+        gpu: ['显卡占用率(%)', '%', 100],
+      }[key] || ['CPU 使用率(%)', '%', 100];
+    }
+
+    function chartPoints(samples, key, maxValue) {
+      const values = samples.map((sample) => Number(sample[key] || 0));
+      const max = maxValue || Math.max(1, ...values) * 1.15;
+      return values.map((value, index) => {
+        const x = 42 + index * (820 / Math.max(1, values.length - 1));
+        const y = 260 - Math.min(1, value / max) * 220;
+        return { x, y, value, time: samples[index].time };
+      });
+    }
+
+    function renderOverviewChart() {
+      const samples = state.hostSamples.length ? state.hostSamples : [{ time: new Date(), cpu: 0, io: 0, memory: 0, network: 0, traffic: 0, gpu: 0 }];
+      const [label, unit, fixedMax] = chartMeta(state.activeChart);
+      const points = chartPoints(samples, state.activeChart, fixedMax);
+      const polyline = points.map((point) => `${point.x},${point.y}`).join(' ');
+      const first = samples[0].time.toLocaleString();
+      const last = samples[samples.length - 1].time.toLocaleString();
+      $('overview-range').textContent = `${first} 至 ${last}`;
       $('overview-chart').innerHTML = `
-        <svg viewBox="0 0 920 210" preserveAspectRatio="none" aria-label="资源趋势">
-          <polyline fill="none" stroke="#52c41a" stroke-width="3" points="${points}" />
+        <svg viewBox="0 0 920 300" preserveAspectRatio="none" aria-label="${label}">
+          <g stroke="#d1d5db" stroke-dasharray="4 4" stroke-width="1">
+            <line x1="42" y1="40" x2="880" y2="40" />
+            <line x1="42" y1="95" x2="880" y2="95" />
+            <line x1="42" y1="150" x2="880" y2="150" />
+            <line x1="42" y1="205" x2="880" y2="205" />
+            <line x1="42" y1="260" x2="880" y2="260" />
+          </g>
+          <text x="12" y="44" fill="#8a8f98" font-size="12">100 %</text>
+          <text x="20" y="264" fill="#8a8f98" font-size="12">0</text>
+          <polyline fill="none" stroke="#52c41a" stroke-width="3" points="${polyline}" />
+          ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="8" fill="transparent" data-chart-point data-label="${label}" data-value="${fmtMetric(point.value, unit)}" data-time="${point.time.toLocaleString()}"></circle>`).join('')}
         </svg>
       `;
     }
@@ -960,7 +1049,33 @@
         notify('请输入 VMID', 'error');
         return;
       }
-      runWithFeedback(event.currentTarget, '查询中', () => loadVmStatus(vmid), '查询完成');
+      window.open(`/vm/${encodeURIComponent(vmid)}`, '_blank', 'noopener');
+    });
+
+    $('overview-tabs').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-chart]');
+      if (!button) return;
+      state.activeChart = button.dataset.chart;
+      for (const item of $('overview-tabs').querySelectorAll('button')) {
+        item.classList.toggle('active', item === button);
+      }
+      renderOverviewChart();
+    });
+
+    $('overview-chart').addEventListener('mousemove', (event) => {
+      const point = event.target.closest('[data-chart-point]');
+      const tip = $('chart-tip');
+      if (!point) {
+        tip.style.display = 'none';
+        return;
+      }
+      tip.textContent = `${point.dataset.time}\n● ${point.dataset.label}: ${point.dataset.value}`;
+      tip.style.left = `${event.clientX + 12}px`;
+      tip.style.top = `${event.clientY - 18}px`;
+      tip.style.display = 'block';
+    });
+    $('overview-chart').addEventListener('mouseleave', () => {
+      $('chart-tip').style.display = 'none';
     });
 
     $('vm-table').addEventListener('click', (event) => {
