@@ -25,6 +25,14 @@ CREATE TABLE IF NOT EXISTS ip_pool (
 
 CREATE INDEX IF NOT EXISTS idx_ip_pool_status ON ip_pool(status);
 CREATE INDEX IF NOT EXISTS idx_ip_pool_vmid ON ip_pool(vmid);
+
+CREATE TABLE IF NOT EXISTS vm_credentials (
+    vmid INTEGER PRIMARY KEY,
+    username TEXT,
+    password TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

@@ -1,5 +1,6 @@
 import ssl
 import html
+import json
 import re
 import secrets
 import time
@@ -14,6 +15,7 @@ from Crypto.Cipher import DES
 
 from app.config import Settings, get_settings
 from app.cloudinit import delete_network_snippet
+from app.credentials import delete_vm_credentials, get_vm_credentials, save_vm_credentials
 from app.db import init_db
 from app.ip_pool import (
     add_ip_addresses,
@@ -30,6 +32,8 @@ from app.schemas import (
     ImageTemplateResponse,
     IpPoolAddRequest,
     IpPoolAddress,
+    VmCredentialsRequest,
+    VmCredentialsResponse,
     VmActionResponse,
     VmCreateRequest,
     VmExpirationRequest,
@@ -362,6 +366,7 @@ async def create_vm(
         start_task = None
         if req.start:
             start_task = await client.vm_action(settings.pve_node, vmid, "start")
+        save_vm_credentials(settings, vmid, req.ci_user, req.ci_password)
         return VmActionResponse(
             vmid=vmid,
             task=task,
@@ -492,6 +497,7 @@ async def delete_vm(
         task = await client.delete_vm(settings.pve_node, vmid)
         released = release_ip_by_vmid(settings, vmid)
         delete_network_snippet(settings, vmid)
+        delete_vm_credentials(settings, vmid)
         return VmActionResponse(
             vmid=vmid,
             task=task,
@@ -509,6 +515,24 @@ async def delete_vm(
 async def set_expiration(vmid: int, req: VmExpirationRequest) -> dict[str, object]:
     # Persistence and scheduler wiring will be added with the DB migration.
     return {"vmid": vmid, "expires_at": req.expires_at, "action": req.action}
+
+
+@app.put(
+    "/api/v1/vms/{vmid}/credentials",
+    response_model=VmCredentialsResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def set_vm_credentials(
+    vmid: int,
+    req: VmCredentialsRequest,
+    settings: Settings = Depends(get_settings),
+) -> VmCredentialsResponse:
+    save_vm_credentials(settings, vmid, req.username, req.password)
+    return VmCredentialsResponse(
+        vmid=vmid,
+        username_saved=bool(req.username),
+        password_saved=bool(req.password),
+    )
 
 
 @app.post(
@@ -555,6 +579,9 @@ async def create_console_token(
 
 
 def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) -> HTMLResponse:
+    credentials = get_vm_credentials(settings, vmid)
+    paste_username = credentials.get("username")
+    paste_password = credentials.get("password")
     ws_url_path = f"/ws/vnc?token={token}"
     ws_scheme = "wss" if settings.public_base_url.startswith("https://") else "ws"
     if settings.public_base_url:
@@ -605,12 +632,18 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
       color: #cbd5e1;
       font-size: 13px;
     }}
+    button:disabled {{
+      opacity: .5;
+      cursor: not-allowed;
+    }}
   </style>
 </head>
 <body>
   <div id="bar">
     <strong>VM {vmid}</strong>
     <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
+    <button id="paste-username" {"disabled" if not paste_username else ""}>Paste User</button>
+    <button id="paste-password" {"disabled" if not paste_password else ""}>Paste Password</button>
     <span id="status">connecting</span>
   </div>
   <div id="screen"></div>
@@ -619,6 +652,8 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
 
     const host = window.location.host;
     const wsUrl = {ws_url!r}.replace('{{host}}', host);
+    const pasteUsername = {json.dumps(paste_username)};
+    const pastePassword = {json.dumps(paste_password)};
     const status = document.getElementById('status');
     const rfb = new RFB(document.getElementById('screen'), wsUrl);
     rfb.scaleViewport = true;
@@ -634,6 +669,12 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
     }});
     document.getElementById('send-ctrl-alt-del').addEventListener('click', () => {{
       rfb.sendCtrlAltDel();
+    }});
+    document.getElementById('paste-username').addEventListener('click', () => {{
+      if (pasteUsername) rfb.clipboardPasteFrom(pasteUsername);
+    }});
+    document.getElementById('paste-password').addEventListener('click', () => {{
+      if (pastePassword) rfb.clipboardPasteFrom(pastePassword);
     }});
   </script>
 </body>

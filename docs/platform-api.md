@@ -46,6 +46,7 @@ VM lifecycle endpoints:
 - `POST /api/v1/vms/{vmid}/resume`
 - `DELETE /api/v1/vms/{vmid}`
 - `POST /api/v1/vms/{vmid}/expiration`
+- `PUT /api/v1/vms/{vmid}/credentials`
 
 Console endpoints:
 
@@ -95,6 +96,10 @@ Example response:
 The `/console` page resolves the VMID from the token server-side, then connects
 to `WS /ws/vnc?token=...`. Tokens are currently in-memory; restarting the
 platform invalidates existing console links.
+
+When a VM is created with `ci_user` or `ci_password`, the platform stores those
+credentials in SQLite so the VNC page can offer paste buttons for username and
+password. Existing VMs can be updated with `PUT /api/v1/vms/{vmid}/credentials`.
 
 ## Next implementation steps
 

@@ -66,6 +66,17 @@ class VmExpirationRequest(BaseModel):
     action: Literal["pause", "delete"] = "pause"
 
 
+class VmCredentialsRequest(BaseModel):
+    username: str | None = None
+    password: str | None = None
+
+
+class VmCredentialsResponse(BaseModel):
+    vmid: int
+    username_saved: bool
+    password_saved: bool
+
+
 class ConsoleSessionResponse(BaseModel):
     vmid: int | None = None
     node: str

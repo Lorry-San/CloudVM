@@ -616,6 +616,7 @@
             <div class="actions">
               <button class="secondary" data-action="status" data-vmid="${vm.vmid}">状态</button>
               <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
+              <button class="secondary" data-action="credentials" data-vmid="${vm.vmid}">凭据</button>
               <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
               <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">暂停</button>
               <button class="danger" data-action="delete" data-vmid="${vm.vmid}">删除</button>
@@ -733,6 +734,20 @@
 
     async function vmAction(action, vmid) {
       if (action === 'status') return loadVmStatus(vmid);
+      if (action === 'credentials') {
+        const username = prompt(`VM ${vmid} 用户名，可留空`);
+        if (username === null) return;
+        const password = prompt(`VM ${vmid} 密码，可留空`);
+        if (password === null) return;
+        log(await api(`/api/v1/vms/${vmid}/credentials`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            username: username || null,
+            password: password || null,
+          }),
+        }));
+        return;
+      }
       if (action === 'console') {
         const data = await api('/api/v1/consoles/token', {
           method: 'POST',
