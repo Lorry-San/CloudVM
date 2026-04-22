@@ -163,6 +163,13 @@ async def dashboard() -> HTMLResponse:
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/vm/{vmid}", response_class=HTMLResponse)
+async def vm_detail_page(vmid: int) -> HTMLResponse:
+    path = Path(__file__).parent / "static" / "vm.html"
+    page = path.read_text(encoding="utf-8").replace("__VMID__", str(vmid))
+    return HTMLResponse(page)
+
+
 def resolve_template_vmid(req: VmCreateRequest, settings: Settings) -> int | None:
     if req.template_vmid is not None:
         return req.template_vmid

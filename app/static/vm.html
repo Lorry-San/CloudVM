@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VM __VMID__ - PVETrafficManager</title>
+  <style>
+    :root {
+      --blue: #2f6df6;
+      --blue-dark: #1f56d8;
+      --bg: #f3f5fb;
+      --panel: #fff;
+      --line: #e4e9f2;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --green: #18a058;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button {
+      min-height: 32px;
+      border: 1px solid rgba(255, 255, 255, .55);
+      border-radius: 4px;
+      padding: 0 14px;
+      background: rgba(255, 255, 255, .08);
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.light { background: #fff; color: var(--blue-dark); border-color: #fff; }
+    button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    button.secondary { background: #eef4ff; border-color: #d7e4ff; color: var(--blue-dark); }
+    button.danger { background: #ff6b72; border-color: #ff6b72; color: #fff; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 7px 10px;
+    }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 13px 12px;
+      text-align: left;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    th { color: #111827; font-weight: 700; background: #fff; }
+    .top {
+      height: 62px;
+      background: var(--blue);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+    }
+    .brand { display: flex; align-items: center; gap: 28px; }
+    .brand strong { font-size: 20px; }
+    .nav { display: flex; gap: 24px; color: rgba(255,255,255,.88); font-size: 14px; }
+    .search { display: flex; align-items: center; gap: 12px; }
+    .search input { width: 180px; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
+    .page { padding: 30px 36px; display: grid; gap: 20px; }
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); gap: 20px; align-items: start; }
+    .hero {
+      background: var(--blue);
+      color: #fff;
+      border-radius: 6px;
+      padding: 36px 40px 20px;
+      display: grid;
+      gap: 22px;
+    }
+    .hero-main { display: flex; align-items: center; gap: 28px; }
+    .power {
+      width: 64px;
+      height: 64px;
+      border-radius: 4px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: var(--green);
+      font-size: 34px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.15);
+    }
+    .hero-title { display: grid; gap: 4px; }
+    .hero-title h1 { margin: 0; font-size: 24px; }
+    .hero-title span { color: rgba(255,255,255,.78); }
+    .hero-spec {
+      margin-left: auto;
+      display: flex;
+      gap: 28px;
+      align-items: center;
+      color: rgba(255,255,255,.78);
+    }
+    .hero-spec strong { color: #fff; font-size: 25px; margin-left: 6px; }
+    .hero-actions { border-top: 1px solid rgba(255,255,255,.25); padding-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .tabs {
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      display: flex;
+      gap: 28px;
+      padding: 0 16px;
+      height: 44px;
+      align-items: center;
+      font-weight: 700;
+    }
+    .tabs span:first-child { color: var(--blue); border-bottom: 2px solid var(--blue); height: 44px; display: inline-flex; align-items: center; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .card-head {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+    .card-head span { height: 46px; display: inline-flex; align-items: center; border-bottom: 2px solid var(--blue); }
+    .card-body { padding: 16px; }
+    .kv { display: grid; grid-template-columns: 140px 1fr auto; gap: 18px; align-items: center; min-height: 44px; font-size: 14px; }
+    .kv label { color: var(--muted); }
+    .kv code { font-family: inherit; color: #111827; }
+    .mini-btn { min-height: 30px; background: #3b82f6; color: #fff; border: 0; border-radius: 4px; }
+    .mini-btn.red { background: #ef6b73; }
+    .task-card { min-height: 160px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      border-radius: 999px;
+      padding: 0 10px;
+      background: #eef4ff;
+      color: var(--blue-dark);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 999px; background: #9ca3af; }
+    .running .dot { background: #22c55e; }
+    .stopped .dot { background: #9ca3af; }
+    .alert .dot { background: #f59e0b; }
+    .muted { color: var(--muted); }
+    .login {
+      min-height: calc(100vh - 62px);
+      display: grid;
+      place-items: center;
+    }
+    .login-box {
+      width: min(430px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 24px;
+      display: grid;
+      gap: 14px;
+    }
+    .hidden { display: none !important; }
+    @media (max-width: 1100px) {
+      .cols { grid-template-columns: 1fr; }
+      .hero-spec { margin-left: 0; }
+      .hero-main { flex-wrap: wrap; }
+      .nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <strong>仿心的主控</strong>
+      <nav class="nav">
+        <span>业务管理⌄</span>
+        <span>区域节点⌄</span>
+        <span>IP管理⌄</span>
+        <span>镜像和ISO⌄</span>
+        <span>用户管理⌄</span>
+        <span>监控⌄</span>
+        <span>系统设置⌄</span>
+      </nav>
+    </div>
+    <div class="search">
+      <input placeholder="请搜索">
+      <span>超级管理员</span>
+    </div>
+  </header>
+
+  <section class="login hidden" id="login-view">
+    <div class="login-box">
+      <strong>需要登录</strong>
+      <input id="token" type="password" placeholder="平台 Token">
+      <button class="primary" id="login">进入实例详情</button>
+      <span class="muted" id="login-error"></span>
+    </div>
+  </section>
+
+  <main class="page hidden" id="app">
+    <section class="cols">
+      <div>
+        <div class="hero">
+          <div class="hero-main">
+            <div class="power" id="power-icon">▶</div>
+            <div class="hero-title">
+              <h1 id="vm-name">VM __VMID__</h1>
+              <span id="vm-subtitle">加载中</span>
+            </div>
+            <div class="hero-spec">
+              <span>CPU <strong id="vm-cpu">-</strong></span>
+              <span>内存 <strong id="vm-mem">-</strong></span>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button id="btn-stop">断网/暂停</button>
+            <button id="btn-restart">重启</button>
+            <button id="btn-console">控制台</button>
+            <button id="btn-paste">凭据</button>
+            <button id="btn-start">开机</button>
+            <button class="danger" id="btn-delete">删除</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <span>概览</span><span>设置</span><span>备份</span><span>快照</span><span>硬件直通</span><span>定时任务</span><span>智能规则</span>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="kv"><label>实例ID</label><code id="info-vmid">__VMID__</code><span></span></div>
+            <div class="kv"><label>主机名</label><code id="info-name">-</code><button class="mini-btn" id="refresh">刷新</button></div>
+            <div class="kv"><label>运行状态</label><code id="info-status">-</code><span></span></div>
+            <div class="kv"><label>节点</label><code id="info-node">-</code><span></span></div>
+            <div class="kv"><label>用户密码</label><code>root/********</code><button class="mini-btn red" id="btn-cred">保存凭据</button></div>
+            <div class="kv"><label>SSH端口</label><code>22</code><span></span></div>
+            <div class="kv"><label>磁盘</label><code id="info-disk">-</code><span></span></div>
+            <div class="kv"><label>流量</label><code id="info-traffic">-</code><span></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span>流量计费统计</span><button class="secondary" id="traffic-refresh">重置流量</button></div>
+        <table>
+          <thead><tr><th>类型</th><th>流入</th><th>流出</th><th>总量</th><th>百分比</th></tr></thead>
+          <tbody id="traffic-table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cols">
+      <div class="card task-card">
+        <div class="card-head"><span>任务</span><a class="muted">更多</a></div>
+        <table>
+          <thead><tr><th>状态</th><th>ID</th><th>任务类型</th><th>开始时间</th><th>进度</th></tr></thead>
+          <tbody><tr><td><span class="pill running"><span class="dot"></span>正常</span></td><td>__VMID__</td><td>实例状态刷新</td><td id="task-time">-</td><td>100%</td></tr></tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-head"><span>弹性IP</span><button class="secondary">＋</button></div>
+          <table>
+            <thead><tr><th>ID</th><th>IP地址</th><th>进带宽</th><th>出带宽</th><th>管理</th></tr></thead>
+            <tbody id="ip-table"></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-head"><span>网络管理</span><button class="secondary">＋</button></div>
+          <table>
+            <thead><tr><th>IP/MAC</th><th>网络名称</th><th>网络类型/vlan</th><th>驱动</th><th>管理</th></tr></thead>
+            <tbody id="network-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const vmid = Number("__VMID__");
+    const $ = (id) => document.getElementById(id);
+    let token = sessionStorage.getItem('platformToken') || '';
+    localStorage.removeItem('platformToken');
+
+    function headers() {
+      return { 'Content-Type': 'application/json', 'X-API-Token': token };
+    }
+    async function api(path, options = {}) {
+      const res = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!res.ok) throw new Error(data && data.detail ? data.detail : text);
+      return data;
+    }
+    function gb(value) {
+      const n = Number(value || 0);
+      return n >= 1000 ? `${(n / 1000).toFixed(2)}TB` : `${n.toFixed(2)}GB`;
+    }
+    function mbFromGb(value) {
+      return `${(Number(value || 0) * 1000).toFixed(2)}MB`;
+    }
+    function pill(status) {
+      const cls = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'alert';
+      return `<span class="pill ${cls}"><span class="dot"></span>${status || '-'}</span>`;
+    }
+    function showLogin(message = '') {
+      $('app').classList.add('hidden');
+      $('login-view').classList.remove('hidden');
+      $('login-error').textContent = message;
+      $('token').value = token;
+      $('token').focus();
+    }
+    function showApp() {
+      $('login-view').classList.add('hidden');
+      $('app').classList.remove('hidden');
+    }
+    async function login() {
+      token = $('token').value.trim();
+      if (!token) return showLogin('请输入平台 Token');
+      sessionStorage.setItem('platformToken', token);
+      try {
+        await api('/api/v1/auth/check');
+        showApp();
+        await load();
+      } catch (err) {
+        sessionStorage.removeItem('platformToken');
+        showLogin(err.message);
+      }
+    }
+    async function load() {
+      const [status, vmRaw, ips] = await Promise.all([
+        api(`/api/v1/status?vmid=${vmid}`),
+        api(`/api/v1/vms/${vmid}`),
+        api('/api/v1/ip-pool'),
+      ]);
+      render(status, vmRaw, Array.isArray(ips) ? ips.filter((item) => item.vmid === vmid) : []);
+    }
+    function render(status, vmRaw, ips) {
+      const name = status.name || vmRaw.name || `VM ${vmid}`;
+      const running = status.status === 'running';
+      $('power-icon').textContent = running ? '▶' : '■';
+      $('vm-name').textContent = name;
+      $('vm-subtitle').textContent = `VMID ${vmid} / ${status.status || '-'}`;
+      $('vm-cpu').textContent = status.cpu?.cpus || vmRaw.cpus || '-';
+      $('vm-mem').textContent = `${Math.round((status.memory?.total_gb || 0))}G`;
+      $('info-name').textContent = name;
+      $('info-status').innerHTML = pill(status.status);
+      $('info-node').textContent = 'pve';
+      $('info-disk').textContent = `${gb(status.disk?.used_gb)} / ${gb(status.disk?.total_gb)}`;
+      $('info-traffic').textContent = `${gb(status.network?.tap_traffic?.total_gb)} total`;
+      $('task-time').textContent = new Date().toLocaleString();
+      const rx = status.network?.tap_traffic?.rx_gb || status.network?.netin_gb || 0;
+      const tx = status.network?.tap_traffic?.tx_gb || status.network?.netout_gb || 0;
+      const total = Number(rx) + Number(tx);
+      const rows = [
+        ['今天', rx, tx, total],
+        ['最近7天', rx, tx, total],
+        ['本月', rx, tx, total],
+        ['04月22号至今', rx, tx, total],
+      ];
+      $('traffic-table').innerHTML = rows.map((row) => `<tr><td>${row[0]}</td><td>${mbFromGb(row[1])}</td><td>${mbFromGb(row[2])}</td><td>${mbFromGb(row[3])}</td><td>0.01%</td></tr>`).join('');
+      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
+      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>vmbr0</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary">编辑</button></td></tr>`;
+    }
+    async function openConsole() {
+      const data = await api('/api/v1/consoles/token', { method: 'POST', body: JSON.stringify({ vmid, ttl_seconds: 600 }) });
+      window.open(data.console_url, '_blank', 'noopener');
+    }
+    async function saveCred() {
+      const username = prompt(`VM ${vmid} 用户名，可留空`);
+      if (username === null) return;
+      const password = prompt(`VM ${vmid} 密码，可留空`);
+      if (password === null) return;
+      await api(`/api/v1/vms/${vmid}/credentials`, { method: 'PUT', body: JSON.stringify({ username: username || null, password: password || null }) });
+      alert('已保存');
+    }
+    async function action(path, method = 'POST') {
+      await api(path, { method, body: method === 'DELETE' ? undefined : '{}' });
+      await load();
+    }
+    $('login').addEventListener('click', login);
+    $('token').addEventListener('keydown', (event) => { if (event.key === 'Enter') login(); });
+    $('refresh').addEventListener('click', load);
+    $('traffic-refresh').addEventListener('click', load);
+    $('btn-console').addEventListener('click', openConsole);
+    $('btn-paste').addEventListener('click', saveCred);
+    $('btn-cred').addEventListener('click', saveCred);
+    $('btn-start').addEventListener('click', () => action(`/api/v1/vms/${vmid}/resume`));
+    $('btn-stop').addEventListener('click', () => action(`/api/v1/vms/${vmid}/pause`));
+    $('btn-restart').addEventListener('click', async () => {
+      await action(`/api/v1/vms/${vmid}/pause`);
+      await action(`/api/v1/vms/${vmid}/resume`);
+    });
+    $('btn-delete').addEventListener('click', async () => {
+      if (!confirm(`删除 VM ${vmid}?`)) return;
+      await action(`/api/v1/vms/${vmid}`, 'DELETE');
+      location.href = '/';
+    });
+    if (token) {
+      showApp();
+      load().catch((err) => showLogin(err.message));
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>

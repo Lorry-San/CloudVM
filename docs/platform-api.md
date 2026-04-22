@@ -66,6 +66,7 @@ The built-in dashboard is served by the same FastAPI process:
 
 - `GET /`
 - `GET /dashboard`
+- `GET /vm/{vmid}`
 
 Open it in a browser and enter `PLATFORM_API_TOKEN`. The dashboard stores the
 platform token only in browser session storage and calls the same API endpoints.
