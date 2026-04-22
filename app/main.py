@@ -531,7 +531,17 @@ async def update_vm_config(
         if not data:
             raise HTTPException(status_code=400, detail="No config changes provided")
         task = await client.set_vm_config(settings.pve_node, vmid, data)
-        return VmActionResponse(vmid=vmid, task=task, status="config_updated")
+        reboot_task = None
+        if req.reboot:
+            status = await client.vm_status(settings.pve_node, vmid)
+            if str(status.get("status")) == "running":
+                reboot_task = await client.vm_action(settings.pve_node, vmid, "reboot")
+        return VmActionResponse(
+            vmid=vmid,
+            task=task,
+            start_task=reboot_task,
+            status="config_updated",
+        )
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

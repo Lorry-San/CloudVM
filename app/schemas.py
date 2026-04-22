@@ -84,6 +84,7 @@ class VmConfigUpdateRequest(BaseModel):
     cores: int | None = Field(default=None, ge=1)
     memory_mb: int | None = Field(default=None, ge=256)
     network_rate: float | None = Field(default=None, gt=0)
+    reboot: bool = True
 
 
 class VmTrafficConfigRequest(BaseModel):

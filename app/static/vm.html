@@ -56,15 +56,16 @@
       text-overflow: ellipsis;
     }
     th { color: #111827; font-weight: 700; background: #fff; }
-    .page { padding: 30px 36px; display: grid; gap: 20px; }
-    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); gap: 20px; align-items: start; }
+    .page { padding: 22px 36px; display: grid; gap: 16px; }
+    .cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(380px, .9fr); gap: 16px; align-items: start; }
+    .side-stack { display: grid; gap: 16px; }
     .hero {
       background: var(--blue);
       color: #fff;
       border-radius: 6px;
-      padding: 36px 40px 20px;
+      padding: 28px 40px 18px;
       display: grid;
-      gap: 22px;
+      gap: 18px;
     }
     .hero-main { display: flex; align-items: center; gap: 28px; }
     .power {
@@ -89,15 +90,15 @@
       color: rgba(255,255,255,.78);
     }
     .hero-spec strong { color: #fff; font-size: 25px; margin-left: 6px; }
-    .hero-actions { border-top: 1px solid rgba(255,255,255,.25); padding-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .hero-actions { border-top: 1px solid rgba(255,255,255,.25); padding-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
     .vm-metrics {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 12px;
     }
     .metric-card {
-      min-height: 92px;
-      padding: 14px;
+      min-height: 86px;
+      padding: 12px 14px;
       display: grid;
       gap: 8px;
     }
@@ -175,7 +176,7 @@
       font-size: 13px;
     }
     .chart-box {
-      min-height: 210px;
+      min-height: 178px;
       border-radius: 6px;
       background:
         repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e5e7eb 40px),
@@ -184,7 +185,7 @@
     }
     .chart-box svg {
       width: 100%;
-      height: 210px;
+      height: 178px;
       display: block;
     }
     .chart-tip {
@@ -353,10 +354,21 @@
             <div class="chart-box" id="vm-chart"></div>
           </div>
         </div>
+      </div>
+
+      <div class="side-stack">
         <div class="card">
+          <div class="card-head"><span>流量计费统计</span><button class="secondary" id="traffic-refresh">重置流量</button></div>
+          <table>
+            <thead><tr><th>类型</th><th>流入</th><th>流出</th><th>总量</th><th>百分比</th></tr></thead>
+            <tbody id="traffic-table"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>实例信息</span><button class="secondary" id="refresh">刷新</button></div>
           <div class="card-body">
             <div class="kv"><label>实例ID</label><code id="info-vmid">__VMID__</code><span></span></div>
-            <div class="kv"><label>主机名</label><code id="info-name">-</code><button class="mini-btn" id="refresh">刷新</button></div>
+            <div class="kv"><label>主机名</label><code id="info-name">-</code><span></span></div>
             <div class="kv"><label>运行状态</label><code id="info-status">-</code><span></span></div>
             <div class="kv"><label>节点</label><code id="info-node">-</code><span></span></div>
             <div class="kv"><label>用户密码</label><code>root/********</code><button class="mini-btn red" id="btn-cred">保存凭据</button></div>
@@ -365,14 +377,6 @@
             <div class="kv"><label>流量</label><code id="info-traffic">-</code><span></span></div>
           </div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><span>流量计费统计</span><button class="secondary" id="traffic-refresh">重置流量</button></div>
-        <table>
-          <thead><tr><th>类型</th><th>流入</th><th>流出</th><th>总量</th><th>百分比</th></tr></thead>
-          <tbody id="traffic-table"></tbody>
-        </table>
       </div>
     </section>
 
@@ -678,6 +682,7 @@
       };
       Object.keys(configPayload).forEach((key) => configPayload[key] === undefined && delete configPayload[key]);
       if (Object.keys(configPayload).length) {
+        configPayload.reboot = true;
         await api(`/api/v1/vms/${vmid}/config`, { method: 'PUT', body: JSON.stringify(configPayload) });
       }
       if (quota !== '') {

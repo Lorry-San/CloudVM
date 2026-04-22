@@ -1052,6 +1052,7 @@
         };
         Object.keys(configPayload).forEach((key) => configPayload[key] === undefined && delete configPayload[key]);
         if (Object.keys(configPayload).length) {
+          configPayload.reboot = true;
           log(await api(`/api/v1/vms/${vmid}/config`, {
             method: 'PUT',
             body: JSON.stringify(configPayload),
