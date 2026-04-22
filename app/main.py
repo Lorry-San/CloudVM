@@ -866,11 +866,16 @@ async def set_vm_credentials(
     req: VmCredentialsRequest,
     settings: Settings = Depends(get_settings),
 ) -> VmCredentialsResponse:
-    save_vm_credentials(settings, vmid, req.username, req.password)
+    username_saved, password_saved = save_vm_credentials(
+        settings,
+        vmid,
+        req.username,
+        req.password,
+    )
     return VmCredentialsResponse(
         vmid=vmid,
-        username_saved=bool(req.username),
-        password_saved=bool(req.password),
+        username_saved=username_saved,
+        password_saved=password_saved,
     )
 
 

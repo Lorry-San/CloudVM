@@ -9,9 +9,14 @@ def save_vm_credentials(
     vmid: int,
     username: str | None,
     password: str | None,
-) -> None:
-    if not username and not password:
-        return
+) -> tuple[bool, bool]:
+    normalized_username = (username or "").strip() or None
+    normalized_password = (password or "").strip() or None
+    # If user supplies a password but leaves username empty, default to root.
+    if normalized_password and not normalized_username:
+        normalized_username = "root"
+    if not normalized_username and not normalized_password:
+        return (False, False)
     with connect_db(settings) as conn:
         conn.execute(
             """
@@ -22,8 +27,9 @@ def save_vm_credentials(
                 password = COALESCE(excluded.password, password),
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (vmid, username, password),
+            (vmid, normalized_username, normalized_password),
         )
+    return (normalized_username is not None, normalized_password is not None)
 
 
 def get_vm_credentials(settings: Settings, vmid: int) -> dict[str, str | None]:

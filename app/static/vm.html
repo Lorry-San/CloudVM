@@ -75,10 +75,11 @@
       display: grid;
       place-items: center;
       background: #fff;
-      color: var(--green);
       font-size: 34px;
       box-shadow: 0 8px 20px rgba(0,0,0,.15);
     }
+    .power.on { color: var(--green); }
+    .power.off { color: var(--red); }
     .hero-title { display: grid; gap: 4px; }
     .hero-title h1 { margin: 0; font-size: 24px; }
     .hero-title span { color: rgba(255,255,255,.78); }
@@ -288,7 +289,7 @@
       <div>
         <div class="hero">
           <div class="hero-main">
-            <div class="power" id="power-icon">▶</div>
+            <div class="power on" id="power-icon">▶</div>
             <div class="hero-title">
               <h1 id="vm-name">VM __VMID__</h1>
               <span id="vm-subtitle">加载中</span>
@@ -639,6 +640,8 @@
       const name = status.name || vmRaw.name || `VM ${vmid}`;
       const running = status.status === 'running';
       $('power-icon').textContent = running ? '▶' : '■';
+      $('power-icon').classList.toggle('on', running);
+      $('power-icon').classList.toggle('off', !running);
       $('vm-name').textContent = name;
       $('vm-subtitle').textContent = `VMID ${vmid} / ${status.status || '-'}`;
       $('vm-cpu').textContent = status.cpu?.cpus || vmRaw.cpus || '-';
@@ -686,7 +689,7 @@
       return data;
     }
     async function saveCred() {
-      const username = prompt(`VM ${vmid} 用户名，可留空`);
+      const username = prompt(`VM ${vmid} 用户名，可留空(默认 root)`, 'root');
       if (username === null) return;
       const password = prompt(`VM ${vmid} 密码，可留空`);
       if (password === null) return;
