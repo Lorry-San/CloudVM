@@ -510,7 +510,9 @@ async def create_vm(
         start_task = None
         if req.start:
             start_task = await client.vm_action(settings.pve_node, vmid, "start")
-        save_vm_credentials(settings, vmid, req.ci_user, req.ci_password)
+        # Default username to root on create if user didn't specify one.
+        default_user = (req.ci_user or "").strip() or "root"
+        save_vm_credentials(settings, vmid, default_user, req.ci_password)
         if req.traffic_limit_gb:
             set_vm_traffic_config(
                 settings,
@@ -926,6 +928,7 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
     credentials = get_vm_credentials(settings, vmid)
     paste_username = credentials.get("username")
     paste_password = credentials.get("password")
+    has_both_credentials = bool(paste_username) and bool(paste_password)
     ws_url_path = f"/ws/vnc?token={token}"
     ws_scheme = "wss" if settings.public_base_url.startswith("https://") else "ws"
     if settings.public_base_url:
@@ -986,9 +989,9 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
   <div id="bar">
     <strong>VM {vmid}</strong>
     <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
-    <button id="type-username" {"disabled" if not paste_username else ""}>输入用户名</button>
-    <button id="type-password" {"disabled" if not paste_password else ""}>输入密码</button>
-    <button id="type-login" {"disabled" if not paste_username or not paste_password else ""}>输入账号密码</button>
+    <button id="type-username" {"disabled" if not has_both_credentials else ""}>输入用户名</button>
+    <button id="type-password" {"disabled" if not has_both_credentials else ""}>输入密码</button>
+    <button id="type-login" {"disabled" if not has_both_credentials else ""}>输入账号密码</button>
     <button id="send-enter">Enter</button>
     <span id="status">connecting</span>
   </div>
