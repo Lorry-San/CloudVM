@@ -143,6 +143,14 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get(
+    "/api/v1/auth/check",
+    dependencies=[Depends(require_api_token)],
+)
+async def auth_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:

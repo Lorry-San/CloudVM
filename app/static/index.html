@@ -664,21 +664,29 @@
         showLogin('请先登录');
         return;
       }
-      const [host, vms, images, ips] = await Promise.all([
+      log('正在加载数据...');
+      const [hostResult, vmsResult, imagesResult, ipsResult] = await Promise.allSettled([
         api('/api/v1/status'),
         api('/api/v1/vms'),
         api('/api/v1/images'),
         api('/api/v1/ip-pool'),
       ]);
+      if (hostResult.status === 'fulfilled') {
+        renderHost(hostResult.value);
+      } else {
+        log(`宿主机状态加载失败: ${hostResult.reason.message}`);
+      }
+      const vms = vmsResult.status === 'fulfilled' ? vmsResult.value : [];
+      const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+      const ips = ipsResult.status === 'fulfilled' ? ipsResult.value : [];
       state.vms = Array.isArray(vms) ? vms.sort((a, b) => a.vmid - b.vmid) : [];
       state.images = images || [];
       state.ips = ips || [];
-      renderHost(host);
       renderVms();
       renderImages();
       renderIps();
       $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
-      log('已刷新');
+      if (hostResult.status === 'fulfilled') log('已刷新');
     }
 
     function showApp() {
@@ -700,14 +708,21 @@
         showLogin('请输入平台 Token');
         return;
       }
+      $('login-button').disabled = true;
+      $('login-button').textContent = '登录中';
+      $('login-error').textContent = '正在验证 Token...';
       sessionStorage.setItem('platformToken', state.token);
       try {
-        await loadAll();
+        await api('/api/v1/auth/check');
         showApp();
+        await loadAll();
       } catch (err) {
         sessionStorage.removeItem('platformToken');
         state.token = '';
         showLogin(err.message);
+      } finally {
+        $('login-button').disabled = false;
+        $('login-button').textContent = '登录';
       }
     }
 
