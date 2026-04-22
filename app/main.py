@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
+from Crypto.Cipher import DES
 
 from app.config import Settings, get_settings
 from app.cloudinit import delete_network_snippet
@@ -682,6 +683,7 @@ async def proxy_pve_websocket(
     target_url: str,
     auth_header: str,
     verify_ssl: bool,
+    vnc_password: str | None = None,
 ) -> None:
     ssl_context = None
     if target_url.startswith("wss://") and not verify_ssl:
@@ -692,6 +694,12 @@ async def proxy_pve_websocket(
         additional_headers={"Authorization": auth_header},
         ssl=ssl_context,
     ) as upstream:
+        if vnc_password:
+            authenticated = await authenticate_vnc_stream(websocket, upstream, vnc_password)
+            if not authenticated:
+                await websocket.close(code=1008)
+                return
+
         async def client_to_pve() -> None:
             try:
                 while True:
@@ -715,6 +723,70 @@ async def proxy_pve_websocket(
         await asyncio.gather(client_to_pve(), pve_to_client())
 
 
+def reverse_bits(value: int) -> int:
+    return int(f"{value:08b}"[::-1], 2)
+
+
+def vnc_auth_response(password: str, challenge: bytes) -> bytes:
+    key = bytes(reverse_bits(byte) for byte in password.encode("utf-8")[:8])
+    key = key.ljust(8, b"\x00")
+    return DES.new(key, DES.MODE_ECB).encrypt(challenge)
+
+
+def ws_message_bytes(message: dict[str, object]) -> bytes:
+    data = message.get("bytes")
+    if data is not None:
+        return data  # type: ignore[return-value]
+    text = message.get("text")
+    if text is not None:
+        return str(text).encode("latin1")
+    return b""
+
+
+def upstream_bytes(message: object) -> bytes:
+    if isinstance(message, bytes):
+        return message
+    return str(message).encode("latin1")
+
+
+async def authenticate_vnc_stream(
+    websocket: WebSocket,
+    upstream,
+    password: str,
+) -> bool:
+    server_version = upstream_bytes(await upstream.recv())
+    await websocket.send_bytes(server_version)
+
+    client_version = ws_message_bytes(await websocket.receive())
+    await upstream.send(client_version)
+
+    security_types = upstream_bytes(await upstream.recv())
+    if not security_types:
+        return False
+    if security_types[0] == 0:
+        await websocket.send_bytes(security_types)
+        return False
+    if 2 not in security_types[1:]:
+        await websocket.send_bytes(security_types)
+        return True
+
+    # Browser sees a no-auth RFB server; the platform handles PVE VNCAuth.
+    await websocket.send_bytes(b"\x01\x01")
+    client_security_type = ws_message_bytes(await websocket.receive())
+    if client_security_type != b"\x01":
+        return False
+
+    await upstream.send(b"\x02")
+    challenge = upstream_bytes(await upstream.recv())
+    if len(challenge) != 16:
+        return False
+    await upstream.send(vnc_auth_response(password, challenge))
+
+    auth_result = upstream_bytes(await upstream.recv())
+    await websocket.send_bytes(auth_result)
+    return auth_result == b"\x00\x00\x00\x00"
+
+
 @app.websocket("/ws/vnc")
 async def bound_vnc_websocket(
     websocket: WebSocket,
@@ -736,6 +808,7 @@ async def bound_vnc_websocket(
         target,
         client.headers["Authorization"],
         settings.pve_verify_ssl,
+        proxy["ticket"],
     )
 
 
@@ -761,6 +834,7 @@ async def vnc_websocket(
         target,
         client.headers["Authorization"],
         settings.pve_verify_ssl,
+        proxy["ticket"],
     )
 
 
