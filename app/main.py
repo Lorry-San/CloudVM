@@ -1015,9 +1015,9 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
       return new Promise((resolve) => setTimeout(resolve, ms));
     }}
     function keysymFor(char) {{
-      if (char === '\n' || char === '\r') return 0xff0d;
-      if (char === '\t') return 0xff09;
       const codePoint = char.codePointAt(0);
+      if (codePoint === 10 || codePoint === 13) return 0xff0d;
+      if (codePoint === 9) return 0xff09;
       if (codePoint >= 0x20 && codePoint <= 0x7e) return codePoint;
       return codePoint;
     }}
