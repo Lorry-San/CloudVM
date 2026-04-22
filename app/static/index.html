@@ -150,6 +150,11 @@
       display: grid;
       gap: 14px;
     }
+    .page-view {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
     .metrics {
       grid-template-columns: repeat(6, minmax(0, 1fr));
     }
@@ -451,75 +456,77 @@
         <button class="secondary" id="reload">刷新</button>
       </div>
       <nav class="nav">
-        <a class="active" href="#overview">总览</a>
-        <a href="#vms">虚拟机</a>
-        <a href="#create">新建</a>
-        <a href="#ips">IP 池</a>
+        <a class="active" href="#overview" data-nav="overview">总览</a>
+        <a href="#vms" data-nav="vms">虚拟机</a>
+        <a href="#ips" data-nav="ips">IP 池</a>
       </nav>
       <small id="last-refresh">未刷新</small>
     </aside>
 
     <main class="main">
-      <div class="topbar" id="overview">
-        <div>
-          <h1><span class="icon">▣</span>控制台</h1>
-          <div class="statusline" id="summary">等待连接</div>
+      <section class="page-view" id="page-overview" data-page="overview">
+        <div class="topbar" id="overview">
+          <div>
+            <h1><span class="icon">▣</span>总览</h1>
+            <div class="statusline" id="summary">等待连接</div>
+          </div>
         </div>
-      </div>
 
-      <section class="grid metrics">
-        <div class="card metric">
-          <span><span class="icon">C</span>CPU 使用率</span>
-          <strong id="cpu-value">-</strong>
-          <div class="bar"><i id="cpu-bar"></i></div>
-        </div>
-        <div class="card metric">
-          <span><span class="icon">M</span>内存使用</span>
-          <strong id="mem-value">-</strong>
-          <div class="bar"><i id="mem-bar"></i></div>
-        </div>
-        <div class="card metric">
-          <span><span class="icon">D</span>硬盘使用</span>
-          <strong id="disk-value">-</strong>
-          <div class="bar"><i id="disk-bar"></i></div>
-        </div>
-        <div class="card metric">
-          <span><span class="icon">I</span>硬盘 IO</span>
-          <strong id="io-value">-</strong>
-          <div class="sub" id="io-sub">-</div>
-        </div>
-        <div class="card metric">
-          <span><span class="icon">N</span>网络带宽</span>
-          <strong id="net-value">-</strong>
-          <div class="sub" id="net-sub">-</div>
-        </div>
-        <div class="card metric">
-          <span><span class="icon">T</span>流量使用</span>
-          <strong id="traffic-value">-</strong>
-          <div class="sub" id="traffic-sub">累计进出</div>
-        </div>
+        <section class="grid metrics">
+          <div class="card metric">
+            <span><span class="icon">C</span>CPU 使用率</span>
+            <strong id="cpu-value">-</strong>
+            <div class="bar"><i id="cpu-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">M</span>内存使用</span>
+            <strong id="mem-value">-</strong>
+            <div class="bar"><i id="mem-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">D</span>硬盘使用</span>
+            <strong id="disk-value">-</strong>
+            <div class="bar"><i id="disk-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">I</span>硬盘 IO</span>
+            <strong id="io-value">-</strong>
+            <div class="sub" id="io-sub">-</div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">N</span>网络带宽</span>
+            <strong id="net-value">-</strong>
+            <div class="sub" id="net-sub">-</div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">T</span>流量使用</span>
+            <strong id="traffic-value">-</strong>
+            <div class="sub" id="traffic-sub">累计进出</div>
+          </div>
+        </section>
+
+        <section class="card overview-chart">
+          <div class="chart-tabs" id="overview-tabs">
+            <button class="active" data-chart="cpu" type="button">CPU 使用量</button>
+            <button data-chart="io" type="button">硬盘IO</button>
+            <button data-chart="memory" type="button">内存用量</button>
+            <button data-chart="network" type="button">网卡</button>
+            <button data-chart="traffic" type="button">用量排行</button>
+            <button data-chart="gpu" type="button">显卡占用率</button>
+          </div>
+          <div class="chart-range" id="overview-range">-</div>
+          <div class="chart-box" id="overview-chart"></div>
+        </section>
       </section>
 
-      <section class="card overview-chart">
-        <div class="chart-tabs" id="overview-tabs">
-          <button class="active" data-chart="cpu" type="button">CPU 使用量</button>
-          <button data-chart="io" type="button">硬盘IO</button>
-          <button data-chart="memory" type="button">内存用量</button>
-          <button data-chart="network" type="button">网卡</button>
-          <button data-chart="traffic" type="button">用量排行</button>
-          <button data-chart="gpu" type="button">显卡占用率</button>
-        </div>
-        <div class="chart-range" id="overview-range">-</div>
-        <div class="chart-box" id="overview-chart"></div>
-      </section>
-
-      <section class="grid two">
-        <div class="card" id="vms">
+      <section class="page-view hidden" id="page-vms" data-page="vms">
+        <div class="card">
           <div class="card-head">
             <h2><span class="tree-icon">▣</span>虚拟机</h2>
             <div class="actions">
               <input id="vmid-filter" placeholder="VMID 状态查询" inputmode="numeric">
               <button class="secondary" id="load-vm-status">查看</button>
+              <button id="create-vm-link" type="button">新建 VM</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -540,21 +547,13 @@
           </div>
           <div class="empty hidden" id="vm-empty">暂无 VM</div>
         </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>状态详情</h2>
-          </div>
-          <div class="card-body">
-            <pre class="log" id="detail-log">-</pre>
-          </div>
-        </div>
       </section>
 
-      <section class="grid two">
-        <div class="card" id="create">
+      <section class="page-view hidden" id="page-create" data-page="create">
+        <div class="card">
           <div class="card-head">
             <h2><span class="tree-icon">＋</span>新建 VM</h2>
+            <button class="secondary" id="back-to-vms" type="button">返回虚拟机</button>
           </div>
           <div class="card-body">
             <form id="create-form" class="form-grid">
@@ -581,8 +580,10 @@
             </form>
           </div>
         </div>
+      </section>
 
-        <div class="card" id="ips">
+      <section class="page-view hidden" id="page-ips" data-page="ips">
+        <div class="card">
           <div class="card-head">
             <h2><span class="tree-icon">⇄</span>IP 池</h2>
             <button class="secondary" id="refresh-ips">刷新</button>
@@ -640,7 +641,21 @@
     }
 
     function log(value) {
-      $('detail-log').textContent = typeof value === 'string' ? value : safeSummary(value);
+      notify(typeof value === 'string' ? value : safeSummary(value));
+    }
+
+    function currentPage() {
+      const page = (window.location.hash || '#overview').replace('#', '');
+      return ['overview', 'vms', 'ips', 'create'].includes(page) ? page : 'overview';
+    }
+
+    function showPage(page = currentPage()) {
+      for (const view of document.querySelectorAll('[data-page]')) {
+        view.classList.toggle('hidden', view.dataset.page !== page);
+      }
+      for (const link of document.querySelectorAll('[data-nav]')) {
+        link.classList.toggle('active', link.dataset.nav === page);
+      }
     }
 
     function notify(message, type = '') {
@@ -950,6 +965,7 @@
       $('login-view').classList.add('hidden');
       $('app-view').classList.remove('hidden');
       $('login-error').textContent = '';
+      showPage();
     }
 
     function showLogin(message = '') {
@@ -1059,6 +1075,13 @@
 
     $('reload').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新中', loadAll, '刷新完成'));
     $('refresh-ips').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新 IP 池中', loadAll, 'IP 池已刷新'));
+    $('create-vm-link').addEventListener('click', () => {
+      window.location.hash = '#create';
+    });
+    $('back-to-vms').addEventListener('click', () => {
+      window.location.hash = '#vms';
+    });
+    window.addEventListener('hashchange', () => showPage());
     $('load-vm-status').addEventListener('click', (event) => {
       const vmid = $('vmid-filter').value.trim();
       if (!vmid) {
@@ -1140,6 +1163,7 @@
       await runWithFeedback(button, '创建中', async () => {
         log(await api('/api/v1/vms', { method: 'POST', body: JSON.stringify(payload) }));
         await loadAll();
+        window.location.hash = '#vms';
       }, '创建任务已提交');
     });
 
