@@ -117,6 +117,12 @@ async def metric_sampler(settings: Settings) -> None:
                     vmid,
                     vm_status,
                 )
+                await enforce_traffic_limit(
+                    vmid,
+                    vm_status["traffic_billing"],
+                    client,
+                    settings,
+                )
                 record_metric_sample(settings, vm_status)
         except asyncio.CancelledError:
             raise
@@ -302,6 +308,50 @@ def set_net_rate(net_config: str, rate: float | None) -> str:
     if rate is not None:
         parts.append(f"rate={rate}")
     return ",".join(parts)
+
+
+def net_is_link_down(net_config: str) -> bool:
+    return any(
+        part == "link_down=1"
+        for part in str(net_config).split(",")
+    )
+
+
+def traffic_limit_exceeded(billing: dict[str, object] | None) -> bool:
+    if not billing or not billing.get("configured") or not billing.get("quota_gb"):
+        return False
+    percent = billing.get("percent")
+    if percent is not None:
+        return float(percent) >= 100
+    remaining = billing.get("remaining_gb")
+    return remaining is not None and float(remaining) <= 0
+
+
+async def enforce_traffic_limit(
+    vmid: int,
+    billing: dict[str, object],
+    client: PveApi,
+    settings: Settings,
+) -> str | None:
+    if not traffic_limit_exceeded(billing):
+        return None
+    config = await client.vm_config(settings.pve_node, vmid)
+    net0 = str(config.get("net0") or "")
+    if not net0 or net_is_link_down(net0):
+        return None
+    task = await client.set_vm_config(
+        settings.pve_node,
+        vmid,
+        {"net0": set_net_link_down(net0, True)},
+    )
+    record_task_log(
+        settings,
+        vmid,
+        "traffic_limit_disconnect",
+        task_id=task,
+        message=f"used={billing.get('used_gb')}GB quota={billing.get('quota_gb')}GB",
+    )
+    return task
 
 
 def detect_primary_disk(config: dict[str, object]) -> str:
@@ -617,6 +667,14 @@ async def build_status_response(
         status = await collect_status_snapshot(vmid, client, settings)
         if vmid is not None:
             status["traffic_billing"] = get_vm_traffic_usage(settings, vmid, status)
+            task = await enforce_traffic_limit(
+                vmid,
+                status["traffic_billing"],
+                client,
+                settings,
+            )
+            if task:
+                status["traffic_billing"]["enforced_task"] = task
         record_metric_sample(settings, status)
         return status
     except PveApiError as exc:
