@@ -43,8 +43,9 @@ download_file() {
 
 detect_country_code() {
   local country=""
-  country="$(curl -fsSL --connect-timeout 5 https://ipapi.co/country/ 2>/dev/null | tr -d '\r\n' || true)"
+  country="$(curl -fsSL --connect-timeout 5 https://ipinfo.io/country 2>/dev/null | tr -d '\r\n' || true)"
   [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://api.ip.sb/geoip 2>/dev/null | sed -n 's/.*"country_code":"\([A-Z][A-Z]\)".*/\1/p' | head -n1 || true)"
+  [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://ifconfig.co/country-iso 2>/dev/null | tr -d '\r\n' || true)"
   [[ -n "$country" ]] || country="UNKNOWN"
   echo "$country"
 }
