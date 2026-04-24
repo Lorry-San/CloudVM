@@ -114,6 +114,25 @@ PVE_IMAGE_TEMPLATES={"debian-12":9000}
 
 下面是最直接的部署方式。
 
+### 一键脚本
+
+仓库里附带了完整脚本：
+
+[`scripts/install-pve-nat-branch.sh`](G:/Codex/PVETrafficManager/scripts/install-pve-nat-branch.sh)
+
+它分两阶段：
+
+1. `phase1`：配置官方 Proxmox 仓库并安装 `proxmox-default-kernel`
+2. `phase2`：安装 `proxmox-ve` 和 NAT 分支平台
+
+用法：
+
+```bash
+bash scripts/install-pve-nat-branch.sh phase1
+reboot
+bash scripts/install-pve-nat-branch.sh phase2
+```
+
 ### 1. 拉取代码
 
 ```bash
