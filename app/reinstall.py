@@ -41,7 +41,7 @@ async def run_reinstall(
     password: str | None = None,
     nameserver: str | None = None,
     start: bool = True,
-    free_old: bool = False,
+    free_old: bool = True,
     dry_run: bool = False,
     task_id: str | None = None,
 ) -> None:

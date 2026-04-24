@@ -31,6 +31,16 @@ from app.ip_pool import (
     release_ip_by_vmid,
 )
 from app.metrics import list_metric_samples, record_metric_sample
+from app.nat import (
+    NatError,
+    allocate_nat_lease,
+    ensure_nat_ready,
+    ensure_nat_rules,
+    get_nat_lease,
+    list_nat_leases,
+    release_nat_lease,
+    remove_nat_rules,
+)
 from app.pve_api import PveApi, PveApiError
 from app.reinstall import ReinstallError, resolve_reinstall_template_vmid, run_reinstall
 from app.schemas import (
@@ -79,6 +89,13 @@ async def startup() -> None:
     global METRIC_SAMPLER_TASK
     settings = get_settings()
     init_db(settings)
+    if settings.nat_enabled:
+        try:
+            await ensure_nat_ready(settings)
+            for nat_lease in list_nat_leases(settings):
+                await ensure_nat_rules(settings, nat_lease)
+        except Exception:
+            pass
     METRIC_SAMPLER_TASK = asyncio.create_task(metric_sampler(settings))
 
 
@@ -99,9 +116,28 @@ async def collect_status_snapshot(
 ) -> dict[str, object]:
     if vmid is None:
         node_status = await client.node_status(settings.pve_node)
-        return normalize_node_status(settings.pve_node, node_status)
+        status = normalize_node_status(settings.pve_node, node_status)
+        if settings.nat_enabled:
+            leases = list_nat_leases(settings)
+            status["nat"] = {
+                "enabled": True,
+                "bridge": settings.nat_bridge,
+                "network": settings.nat_network_cidr,
+                "host_ip": settings.nat_host_ip,
+                "port_start": settings.nat_port_start,
+                "ports_per_vm": settings.nat_ports_per_vm,
+                "leased": len(leases),
+            }
+        return status
     vm_status = await client.vm_status(settings.pve_node, vmid)
-    return normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid), settings.pve_node)
+    status = normalize_vm_status(vmid, vm_status, vm_tap_traffic(vmid), settings.pve_node)
+    nat_lease = get_nat_lease(settings, vmid)
+    if nat_lease:
+        status["nat"] = nat_lease.model_dump()
+        status["network_mode"] = "nat"
+    else:
+        status["network_mode"] = "public"
+    return status
 
 
 async def metric_sampler(settings: Settings) -> None:
@@ -246,6 +282,7 @@ def build_cloud_init_config(
     req: VmCreateRequest,
     allocated_ip_config: str | None = None,
     allocated_nameserver: str | None = None,
+    prefer_allocated_network: bool = False,
 ) -> dict[str, object]:
     config: dict[str, object] = {}
     if req.ci_user:
@@ -254,8 +291,12 @@ def build_cloud_init_config(
         config["cipassword"] = req.ci_password
     if req.ssh_keys:
         config["sshkeys"] = req.ssh_keys
-    ip_config = req.ip_config or allocated_ip_config
-    nameserver = req.nameserver or allocated_nameserver
+    if prefer_allocated_network:
+        ip_config = allocated_ip_config or req.ip_config
+        nameserver = allocated_nameserver or req.nameserver
+    else:
+        ip_config = req.ip_config or allocated_ip_config
+        nameserver = req.nameserver or allocated_nameserver
     if ip_config:
         config["ipconfig0"] = ip_config
     if nameserver:
@@ -407,7 +448,22 @@ async def get_vm_ip_pool(
     vmid: int,
     settings: Settings = Depends(get_settings),
 ) -> list[IpPoolAddress]:
-    return list_ip_addresses_by_vmid(settings, vmid)
+    rows = list_ip_addresses_by_vmid(settings, vmid)
+    nat_lease = get_nat_lease(settings, vmid)
+    if nat_lease:
+        rows.append(
+            IpPoolAddress(
+                address=nat_lease.address,
+                cidr=nat_lease.cidr,
+                gateway=nat_lease.gateway,
+                nameserver=nat_lease.nameserver,
+                bridge=nat_lease.bridge,
+                status="allocated",
+                vmid=vmid,
+                note=f"NAT SSH:{nat_lease.ssh_port} ports:{nat_lease.port_start}-{nat_lease.port_end}",
+            )
+        )
+    return rows
 
 
 @app.post(
@@ -460,13 +516,19 @@ async def create_vm(
     client: PveApi = Depends(pve),
     settings: Settings = Depends(get_settings),
 ) -> VmActionResponse:
+    lease = None
+    nat_lease = None
     try:
         vmid = req.vmid or await client.next_vmid()
         storage = req.storage or settings.default_storage
         bridge = req.bridge or settings.default_bridge
         template_vmid = resolve_template_vmid(req, settings)
-        lease = None
-        if req.allocate_ip and not req.ip_config:
+        network_mode = req.network.mode if req.network else "public"
+        if network_mode == "nat":
+            await ensure_nat_ready(settings)
+            nat_lease = allocate_nat_lease(settings, vmid)
+            bridge = settings.nat_bridge
+        elif req.allocate_ip and not req.ip_config:
             lease = allocate_ip(settings, vmid)
             if lease is None:
                 raise HTTPException(status_code=409, detail="No available IP address")
@@ -490,8 +552,9 @@ async def create_vm(
             vm_config = await client.vm_config(settings.pve_node, vmid)
             cloud_init_config = build_cloud_init_config(
                 req,
-                allocated_ip_config=lease.ip_config if lease else None,
-                allocated_nameserver=lease.nameserver if lease else None,
+                allocated_ip_config=nat_lease.ip_config if nat_lease else (lease.ip_config if lease else None),
+                allocated_nameserver=nat_lease.nameserver if nat_lease else (lease.nameserver if lease else None),
+                prefer_allocated_network=nat_lease is not None,
             )
             if req.disk_gb:
                 primary_disk = detect_primary_disk(vm_config)
@@ -515,11 +578,14 @@ async def create_vm(
             vm_config = await client.vm_config(settings.pve_node, vmid)
             cloud_init_config = build_cloud_init_config(
                 req,
-                allocated_ip_config=lease.ip_config if lease else None,
-                allocated_nameserver=lease.nameserver if lease else None,
+                allocated_ip_config=nat_lease.ip_config if nat_lease else (lease.ip_config if lease else None),
+                allocated_nameserver=nat_lease.nameserver if nat_lease else (lease.nameserver if lease else None),
+                prefer_allocated_network=nat_lease is not None,
             )
             if cloud_init_config:
                 await client.set_vm_config(settings.pve_node, vmid, cloud_init_config)
+        if nat_lease:
+            await ensure_nat_rules(settings, nat_lease)
         start_task = None
         if req.start:
             start_task = await client.vm_action(settings.pve_node, vmid, "start")
@@ -549,8 +615,31 @@ async def create_vm(
             task=task,
             start_task=start_task,
             allocated_ip=lease.address if lease else None,
+            nat_ip=nat_lease.address if nat_lease else None,
+            ssh_port=nat_lease.ssh_port if nat_lease else None,
+            port_range_start=nat_lease.port_start if nat_lease else None,
+            port_range_end=nat_lease.port_end if nat_lease else None,
+            network_mode="nat" if nat_lease else "public",
         )
+    except NatError as exc:
+        if nat_lease:
+            try:
+                await remove_nat_rules(settings, nat_lease)
+            except Exception:
+                pass
+            release_nat_lease(settings, vmid)
+        if lease:
+            release_ip_by_vmid(settings, vmid)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except PveApiError as exc:
+        if nat_lease:
+            try:
+                await remove_nat_rules(settings, nat_lease)
+            except Exception:
+                pass
+            release_nat_lease(settings, vmid)
+        if lease:
+            release_ip_by_vmid(settings, vmid)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
@@ -563,7 +652,16 @@ async def list_vms(
     settings: Settings = Depends(get_settings),
 ) -> list[dict[str, object]]:
     try:
-        return await client.list_vms(settings.pve_node)
+        vms = await client.list_vms(settings.pve_node)
+        nat_map = {lease.vmid: lease for lease in list_nat_leases(settings)}
+        for vm in vms:
+            lease = nat_map.get(int(vm.get("vmid")))
+            if lease:
+                vm["network_mode"] = "nat"
+                vm["nat"] = lease.model_dump()
+            else:
+                vm["network_mode"] = "public"
+        return vms
     except PveApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -890,12 +988,19 @@ async def delete_vm(
     settings: Settings = Depends(get_settings),
 ) -> VmActionResponse:
     try:
+        nat_lease = get_nat_lease(settings, vmid)
         try:
             await client.vm_action(settings.pve_node, vmid, "stop")
         except PveApiError:
             pass
         task = await client.delete_vm(settings.pve_node, vmid)
         released = release_ip_by_vmid(settings, vmid)
+        if nat_lease:
+            try:
+                await remove_nat_rules(settings, nat_lease)
+            except Exception:
+                pass
+            release_nat_lease(settings, vmid)
         delete_network_snippet(settings, vmid)
         delete_vm_credentials(settings, vmid)
         record_task_log(settings, vmid, "delete", task_id=task)
@@ -903,6 +1008,8 @@ async def delete_vm(
             vmid=vmid,
             task=task,
             released_ip=released.address if released else None,
+            nat_ip=nat_lease.address if nat_lease else None,
+            ssh_port=nat_lease.ssh_port if nat_lease else None,
             status="deleting",
         )
     except PveApiError as exc:

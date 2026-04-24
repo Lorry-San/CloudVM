@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     snippet_storage: str = Field(default="local", alias="PVE_SNIPPET_STORAGE")
     default_storage: str = Field(default="local-lvm", alias="PVE_DEFAULT_STORAGE")
     default_bridge: str = Field(default="vmbr0", alias="PVE_DEFAULT_BRIDGE")
+    nat_enabled: bool = Field(default=True, alias="PVE_NAT_ENABLED")
+    nat_bridge: str = Field(default="nat0", alias="PVE_NAT_BRIDGE")
+    nat_network_cidr: str = Field(default="192.168.0.0/24", alias="PVE_NAT_NETWORK")
+    nat_host_ip: str = Field(default="192.168.0.254", alias="PVE_NAT_HOST_IP")
+    nat_port_start: int = Field(default=30001, alias="PVE_NAT_PORT_START")
+    nat_ports_per_vm: int = Field(default=10, alias="PVE_NAT_PORTS_PER_VM")
+    nat_nameserver: str = Field(default="8.8.8.8", alias="PVE_NAT_NAMESERVER")
+    nat_uplink_interface: str = Field(default="", alias="PVE_NAT_UPLINK_INTERFACE")
     image_templates: dict[str, int] = Field(
         default_factory=dict,
         alias="PVE_IMAGE_TEMPLATES",

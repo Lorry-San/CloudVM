@@ -374,7 +374,9 @@
             <div class="kv"><label>运行状态</label><code id="info-status">-</code><span></span></div>
             <div class="kv"><label>节点</label><code id="info-node">-</code><span></span></div>
             <div class="kv"><label>用户密码</label><code>root/********</code><button class="mini-btn red" id="btn-cred">保存凭据</button></div>
-            <div class="kv"><label>SSH端口</label><code>22</code><span></span></div>
+            <div class="kv"><label>SSH端口</label><code id="info-ssh-port">22</code><span></span></div>
+            <div class="kv"><label>NAT内网IP</label><code id="info-nat-ip">-</code><span></span></div>
+            <div class="kv"><label>NAT端口段</label><code id="info-nat-ports">-</code><span></span></div>
             <div class="kv"><label>磁盘</label><code id="info-disk">-</code><span></span></div>
             <div class="kv"><label>流量</label><code id="info-traffic">-</code><span></span></div>
           </div>
@@ -651,6 +653,9 @@
       $('info-name').textContent = name;
       $('info-status').innerHTML = pill(status.status);
       $('info-node').textContent = status.node || '-';
+      $('info-ssh-port').textContent = status.nat?.ssh_port || 22;
+      $('info-nat-ip').textContent = status.nat?.address || '-';
+      $('info-nat-ports').textContent = status.nat ? `${status.nat.port_start}-${status.nat.port_end}` : '-';
       $('info-disk').textContent = `${gb(status.disk?.used_gb)} / ${gb(status.disk?.total_gb)}`;
       $('info-traffic').textContent = `${gb(status.network?.tap_traffic?.total_gb)} total`;
       const rx = status.network?.tap_traffic?.rx_gb || status.network?.netin_gb || 0;
@@ -682,8 +687,8 @@
         const percent = row[4] === null || row[4] === undefined ? '-' : `${Number(row[4]).toFixed(2)}%`;
         return `<tr><td>${row[0]}</td><td>${mbFromGb(row[1])}</td><td>${mbFromGb(row[2])}</td><td>${gb(row[3])}</td><td>${percent}</td></tr>`;
       }).join('');
-      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary" data-not-ready="单 VM 弹性 IP 管理暂未接后端接口，请先在控制台 IP 池管理">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
-      $('network-table').innerHTML = `<tr><td>${ips[0]?.address || '-'}<br><span class="muted">MAC 随 PVE 配置</span></td><td>${ips[0]?.bridge || '-'}</td><td>VPC网络/0</td><td>Virtio</td><td><button class="secondary" data-not-ready="网卡编辑暂未接后端接口">编辑</button></td></tr>`;
+      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary" data-not-ready="${ip.note || '单 VM 弹性 IP 管理暂未接后端接口，请先在控制台 IP 池管理'}">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
+      $('network-table').innerHTML = `<tr><td>${status.nat?.address || ips[0]?.address || '-'}<br><span class="muted">${status.nat ? `SSH ${status.nat.ssh_port} / ${status.nat.external_host}` : 'MAC 随 PVE 配置'}</span></td><td>${status.nat?.bridge || ips[0]?.bridge || '-'}</td><td>${status.nat ? 'NAT/0' : 'VPC网络/0'}</td><td>Virtio</td><td><button class="secondary" data-not-ready="网卡编辑暂未接后端接口">编辑</button></td></tr>`;
     }
     async function openConsole() {
       const data = await api('/api/v1/consoles/token', { method: 'POST', body: JSON.stringify({ vmid, ttl_seconds: 900 }) });
@@ -770,7 +775,7 @@
       if (diskSize === null) return;
       const slot = prompt(`VM ${vmid} 系统盘槽位`, 'virtio0');
       if (slot === null) return;
-      if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认保留。`)) return;
+      if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认删除。`)) return;
       await api(`/api/v1/vms/${vmid}/reinstall`, {
         method: 'POST',
         body: JSON.stringify({
@@ -780,7 +785,7 @@
           ci_user: 'root',
           password,
           start: true,
-          free_old: false,
+          free_old: true,
         }),
       });
       await load();

@@ -26,6 +26,24 @@ CREATE TABLE IF NOT EXISTS ip_pool (
 CREATE INDEX IF NOT EXISTS idx_ip_pool_status ON ip_pool(status);
 CREATE INDEX IF NOT EXISTS idx_ip_pool_vmid ON ip_pool(vmid);
 
+CREATE TABLE IF NOT EXISTS nat_leases (
+    vmid INTEGER PRIMARY KEY,
+    address TEXT NOT NULL UNIQUE,
+    cidr INTEGER NOT NULL,
+    gateway TEXT NOT NULL,
+    nameserver TEXT,
+    bridge TEXT NOT NULL,
+    host_ip TEXT NOT NULL,
+    external_host TEXT NOT NULL,
+    port_start INTEGER NOT NULL,
+    port_end INTEGER NOT NULL,
+    ssh_port INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_nat_leases_address ON nat_leases(address);
+
 CREATE TABLE IF NOT EXISTS vm_credentials (
     vmid INTEGER PRIMARY KEY,
     username TEXT,

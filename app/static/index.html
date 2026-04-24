@@ -564,6 +564,7 @@
               <label>内存 MB<input name="memory_mb" type="number" min="256" value="2048"></label>
               <label>磁盘 GB<input name="disk_gb" type="number" min="1" value="40"></label>
               <label>存储<input name="storage" placeholder="默认"></label>
+              <label>网络模式<select name="network_mode"><option value="nat" selected>NAT</option><option value="public">公网桥接</option></select></label>
               <label>网桥<input name="bridge" placeholder="vmbr0"></label>
               <label>端口速率<input name="rate" type="number" step="0.1" placeholder="不限制"></label>
               <label>流量额度 GB<input name="traffic_limit_gb" type="number" min="1" step="1" placeholder="不限制"></label>
@@ -781,7 +782,8 @@
       $('net-sub').textContent = '入 / 出';
       $('traffic-value').textContent = fmtGb(rx + tx);
       $('traffic-sub').textContent = '累计流量';
-      $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时`;
+      const natSummary = status.nat?.enabled ? `，NAT ${status.nat.bridge} / 已分配 ${status.nat.leased}` : '';
+      $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时${natSummary}`;
       addHostSample(status, { cpu, memPct, diskPct, rx, tx });
       renderOverviewChart();
     }
@@ -871,10 +873,11 @@
         const cpu = `${(Number(vm.cpu || 0) * 100).toFixed(1)}%`;
         const mem = `${fmtGb((Number(vm.mem || 0) / 1_000_000_000))} / ${fmtGb((Number(vm.maxmem || 0) / 1_000_000_000))}`;
         const net = `${fmtGb((Number(vm.netin || 0) + Number(vm.netout || 0)) / 1_000_000_000)}`;
+        const natText = vm.nat ? ` / NAT ${vm.nat.address} / SSH ${vm.nat.ssh_port}` : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${vm.vmid}</td>
-          <td title="${vm.name || ''}">${vm.name || '-'}</td>
+          <td title="${(vm.name || '') + natText}">${vm.name || '-'}${vm.network_mode === 'nat' ? ' [NAT]' : ''}</td>
           <td>${vmPill(vm.status)}</td>
           <td>${cpu}</td>
           <td title="${mem}">${mem}</td>
@@ -1105,7 +1108,7 @@
         if (diskSize === null) return;
         const slot = prompt(`VM ${vmid} 系统盘槽位`, 'virtio0');
         if (slot === null) return;
-        if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认保留。`)) return;
+        if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认删除。`)) return;
         log(await api(`/api/v1/vms/${vmid}/reinstall`, {
           method: 'POST',
           body: JSON.stringify({
@@ -1115,7 +1118,7 @@
             ci_user: 'root',
             password,
             start: true,
-            free_old: false,
+            free_old: true,
           }),
         }));
         notify(`VM ${vmid} 重装任务已提交`, 'ok');
@@ -1233,7 +1236,10 @@
         disk_gb: optionalNumber(formValue(form, 'disk_gb')),
         storage: formValue(form, 'storage') || undefined,
         bridge: formValue(form, 'bridge') || undefined,
-        network: rate ? { rate } : undefined,
+        network: {
+          mode: formValue(form, 'network_mode') || 'nat',
+          ...(rate ? { rate } : {}),
+        },
         traffic_limit_gb: optionalNumber(formValue(form, 'traffic_limit_gb')),
         traffic_reset_day: optionalNumber(formValue(form, 'traffic_reset_day')) || 1,
         traffic_reset_hour: optionalNumber(formValue(form, 'traffic_reset_hour')) || 0,
@@ -1243,7 +1249,9 @@
         ssh_keys: formValue(form, 'ssh_keys') || undefined,
         ip_config: formValue(form, 'ip_config') || undefined,
         nameserver: formValue(form, 'nameserver') || undefined,
-        allocate_ip: Boolean(new FormData(form).get('allocate_ip')),
+        allocate_ip: (formValue(form, 'network_mode') || 'nat') === 'public'
+          ? Boolean(new FormData(form).get('allocate_ip'))
+          : false,
         start: true,
       };
       Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);

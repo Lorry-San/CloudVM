@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class VmNetworkConfig(BaseModel):
+    mode: Literal["public", "nat"] = "public"
     bridge: str | None = None
     model: Literal["virtio", "e1000", "rtl8139", "vmxnet3"] = "virtio"
     rate: float | None = Field(
@@ -55,6 +56,11 @@ class VmActionResponse(BaseModel):
     task: str | None = None
     start_task: str | None = None
     allocated_ip: str | None = None
+    nat_ip: str | None = None
+    ssh_port: int | None = None
+    port_range_start: int | None = None
+    port_range_end: int | None = None
+    network_mode: Literal["public", "nat"] | None = None
     released_ip: str | None = None
     status: str = "accepted"
 
@@ -98,7 +104,7 @@ class VmReinstallRequest(BaseModel):
     password: str | None = None
     nameserver: str | None = None
     start: bool = True
-    free_old: bool = False
+    free_old: bool = True
     dry_run: bool = False
 
 
@@ -173,4 +179,19 @@ class IpLease(BaseModel):
     gateway: str
     nameserver: str | None = None
     bridge: str | None = None
+    ip_config: str
+
+
+class NatLease(BaseModel):
+    vmid: int
+    address: str
+    cidr: int
+    gateway: str
+    nameserver: str | None = None
+    bridge: str
+    host_ip: str
+    external_host: str
+    port_start: int
+    port_end: int
+    ssh_port: int
     ip_config: str
