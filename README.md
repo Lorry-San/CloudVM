@@ -31,6 +31,7 @@
 - NAT IP 自动分配
 - NAT DNAT/SNAT 规则自动下发
 - 服务重启后自动恢复 NAT 规则
+- 如果检测到出口 IP 位于中国大陆，安装脚本会自动切换 Debian 和 Proxmox 到清华镜像
 
 ## 运行要求
 

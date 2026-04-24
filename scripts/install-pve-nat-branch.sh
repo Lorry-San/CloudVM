@@ -33,6 +33,58 @@ primary_ip() {
   ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
 }
 
+download_file() {
+  local url="$1"
+  local output="$2"
+  info "下载: $url"
+  curl -fL --connect-timeout 10 --retry 3 --retry-delay 2 -o "$output" "$url" \
+    || die "下载失败: $url"
+}
+
+detect_country_code() {
+  local country=""
+  country="$(curl -fsSL --connect-timeout 5 https://ipapi.co/country/ 2>/dev/null | tr -d '\r\n' || true)"
+  [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://api.ip.sb/geoip 2>/dev/null | sed -n 's/.*"country_code":"\([A-Z][A-Z]\)".*/\1/p' | head -n1 || true)"
+  [[ -n "$country" ]] || country="UNKNOWN"
+  echo "$country"
+}
+
+is_cn_ip() {
+  [[ "$(detect_country_code)" == "CN" ]]
+}
+
+configure_debian_mirror_if_cn() {
+  local codename
+  codename="$(detect_codename)"
+  if ! is_cn_ip; then
+    info "出口 IP 非中国大陆，Debian 继续使用默认源"
+    return
+  fi
+
+  info "检测到中国大陆出口 IP，切换 Debian 源到清华镜像"
+  if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then
+    cat >/etc/apt/sources.list.d/debian.sources <<EOF
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian
+Suites: ${codename} ${codename}-updates
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian-security
+Suites: ${codename}-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+  else
+    cat >/etc/apt/sources.list <<EOF
+deb https://mirrors.tuna.tsinghua.edu.cn/debian ${codename} main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian ${codename}-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security ${codename}-security main contrib non-free non-free-firmware
+EOF
+  fi
+}
+
 ensure_hosts_mapping() {
   local host short ip
   short="$(hostname -s)"
@@ -56,29 +108,37 @@ ensure_hosts_mapping() {
 }
 
 setup_pve_repo() {
-  local codename
+  local codename pve_repo_base key_url
   codename="$(detect_codename)"
+  configure_debian_mirror_if_cn
   apt-get update
   apt-get install -y wget curl ca-certificates gnupg
 
+  pve_repo_base="http://download.proxmox.com/debian/pve"
+  if is_cn_ip; then
+    info "检测到中国大陆出口 IP，切换 Proxmox 源到清华镜像"
+    pve_repo_base="https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"
+  fi
+
   if [[ "$codename" == "bookworm" ]]; then
     info "配置 Debian 12 / Proxmox VE 8 仓库"
-    wget -qO /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg \
-      https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg
-    echo "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription" \
+    key_url="https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg"
+    download_file "$key_url" /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+    echo "deb [arch=amd64] ${pve_repo_base} bookworm pve-no-subscription" \
       >/etc/apt/sources.list.d/pve-install-repo.list
   elif [[ "$codename" == "trixie" ]]; then
     info "配置 Debian 13 / Proxmox VE 9 仓库"
     install -d /usr/share/keyrings
-    wget -qO /usr/share/keyrings/proxmox-archive-keyring.gpg \
-      https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg
+    key_url="https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg"
+    download_file "$key_url" /usr/share/keyrings/proxmox-archive-keyring.gpg
     cat >/etc/apt/sources.list.d/pve-install-repo.sources <<'EOF'
 Types: deb
-URIs: http://download.proxmox.com/debian/pve
+URIs: REPLACE_PVE_REPO_BASE
 Suites: trixie
 Components: pve-no-subscription
 Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
 EOF
+    sed -i "s|REPLACE_PVE_REPO_BASE|${pve_repo_base}|g" /etc/apt/sources.list.d/pve-install-repo.sources
   else
     die "不支持的 Debian 版本代号: $codename"
   fi
