@@ -7,6 +7,7 @@ BRANCH="${BRANCH:-beta-2.0.0-nat}"
 SERVICE_NAME="${SERVICE_NAME:-pvetrafficmanager}"
 PANEL_PORT="${PANEL_PORT:-8080}"
 REPO_URL="${REPO_URL:-https://github.com/Lorry-San/PVETrafficManager.git}"
+GITHUB_PROXY="${GITHUB_PROXY:-https://ghproxy.liuyingidc.cn}"
 
 info() { echo -e "\033[1;34m[INFO]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
@@ -41,9 +42,19 @@ download_file() {
     || die "下载失败: $url"
 }
 
+proxy_github_url() {
+  local url="$1"
+  if [[ -n "${GITHUB_PROXY:-}" ]]; then
+    echo "${GITHUB_PROXY%/}/${url}"
+  else
+    echo "$url"
+  fi
+}
+
 detect_country_code() {
   local country=""
-  country="$(curl -fsSL --connect-timeout 5 https://ipinfo.io/country 2>/dev/null | tr -d '\r\n' || true)"
+  country="$(curl -fsSL --connect-timeout 5 https://ipinfo.io/json 2>/dev/null | sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([A-Z][A-Z]\)".*/\1/p' | head -n1 || true)"
+  [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://ipinfo.io/country 2>/dev/null | tr -d '\r\n' || true)"
   [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://api.ip.sb/geoip 2>/dev/null | sed -n 's/.*"country_code":"\([A-Z][A-Z]\)".*/\1/p' | head -n1 || true)"
   [[ -n "$country" ]] || country="$(curl -fsSL --connect-timeout 5 https://ifconfig.co/country-iso 2>/dev/null | tr -d '\r\n' || true)"
   [[ -n "$country" ]] || country="UNKNOWN"
@@ -249,6 +260,7 @@ EOF
 }
 
 deploy_app() {
+  local tarball_url archive_path extract_dir
   info "部署 NAT 分支面板"
   mkdir -p "$(dirname "$APP_DIR")"
   if [[ -d "${APP_DIR}/.git" ]]; then
@@ -256,7 +268,14 @@ deploy_app() {
     git -C "$APP_DIR" checkout "$BRANCH"
     git -C "$APP_DIR" pull origin "$BRANCH"
   else
-    git clone -b "$BRANCH" "$REPO_URL" "$APP_DIR"
+    tarball_url="$(proxy_github_url "https://github.com/Lorry-San/PVETrafficManager/archive/refs/heads/${BRANCH}.tar.gz")"
+    archive_path="/tmp/PVETrafficManager-${BRANCH}.tar.gz"
+    extract_dir="/tmp/PVETrafficManager-${BRANCH}"
+    rm -rf "$extract_dir" "$APP_DIR"
+    mkdir -p "$extract_dir"
+    download_file "$tarball_url" "$archive_path"
+    tar -xzf "$archive_path" -C "$extract_dir" --strip-components=1
+    mv "$extract_dir" "$APP_DIR"
   fi
 
   cd "$APP_DIR"

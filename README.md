@@ -134,6 +134,12 @@ reboot
 bash scripts/install-pve-nat-branch.sh phase2
 ```
 
+中国大陆机器首次部署时，脚本会优先通过 `ghproxy.liuyingidc.cn` 下载 GitHub 分支压缩包。需要手动指定时可先执行：
+
+```bash
+export GITHUB_PROXY=https://ghproxy.liuyingidc.cn
+```
+
 ### 1. 拉取代码
 
 ```bash
