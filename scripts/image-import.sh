@@ -134,6 +134,10 @@ customize_image() {
 storage_path_for_dir() {
   local storage="$1"
   local path
+  if [[ "$storage" == "local" ]]; then
+    printf '%s\n' "/var/lib/vz"
+    return 0
+  fi
   path="$(awk -v target="$storage" '
     $1=="dir:" {current=$2}
     current==target && $1=="path" {print $2; exit}

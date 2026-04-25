@@ -357,6 +357,7 @@ Notes:
 
 - this script is intended for PVE dir storage such as `local`
 - it does not support block storages such as `local-lvm`
+- `local` is resolved directly to `/var/lib/vz`, so old nodes without a usable `storage.cfg` can still use it
 - Debian images use the official `generic-amd64.qcow2` build
 - the generated VM profile defaults to `q35 + cpu=host + agent=1 + firewall=1`
 
