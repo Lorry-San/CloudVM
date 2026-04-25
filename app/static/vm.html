@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VM __VMID__ - PVETrafficManager</title>
+  <style>
+    :root {
+      --blue: #2f6df6;
+      --blue-dark: #1f56d8;
+      --bg: #f3f5fb;
+      --panel: #fff;
+      --line: #e4e9f2;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --green: #18a058;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button {
+      min-height: 32px;
+      border: 1px solid rgba(255, 255, 255, .55);
+      border-radius: 4px;
+      padding: 0 14px;
+      background: rgba(255, 255, 255, .08);
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.light { background: #fff; color: var(--blue-dark); border-color: #fff; }
+    button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    button.secondary { background: #eef4ff; border-color: #d7e4ff; color: var(--blue-dark); }
+    button.danger { background: #ff6b72; border-color: #ff6b72; color: #fff; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 7px 10px;
+    }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 13px 12px;
+      text-align: left;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    th { color: #111827; font-weight: 700; background: #fff; }
+    .page { padding: 22px 36px; display: grid; gap: 16px; }
+    .cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(380px, .9fr); gap: 16px; align-items: start; }
+    .side-stack { display: grid; gap: 16px; }
+    .hero {
+      background: var(--blue);
+      color: #fff;
+      border-radius: 6px;
+      padding: 28px 40px 18px;
+      display: grid;
+      gap: 18px;
+    }
+    .hero-main { display: flex; align-items: center; gap: 28px; }
+    .power {
+      width: 64px;
+      height: 64px;
+      border-radius: 4px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      font-size: 34px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.15);
+    }
+    .power.on { color: var(--green); }
+    .power.off { color: var(--red); }
+    .hero-title { display: grid; gap: 4px; }
+    .hero-title h1 { margin: 0; font-size: 24px; }
+    .hero-title span { color: rgba(255,255,255,.78); }
+    .hero-spec {
+      margin-left: auto;
+      display: flex;
+      gap: 28px;
+      align-items: center;
+      color: rgba(255,255,255,.78);
+    }
+    .hero-spec strong { color: #fff; font-size: 25px; margin-left: 6px; }
+    .hero-actions { border-top: 1px solid rgba(255,255,255,.25); padding-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .vm-metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .metric-card {
+      min-height: 86px;
+      padding: 12px 14px;
+      display: grid;
+      gap: 8px;
+    }
+    .metric-card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .metric-card strong {
+      font-size: 22px;
+      color: #111827;
+    }
+    .metric-card small { color: var(--muted); }
+    .tabs {
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      display: flex;
+      gap: 28px;
+      padding: 0 16px;
+      height: 44px;
+      align-items: center;
+      font-weight: 700;
+    }
+    .tabs span:first-child { color: var(--blue); border-bottom: 2px solid var(--blue); height: 44px; display: inline-flex; align-items: center; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .card-head {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+    .card-head span { height: 46px; display: inline-flex; align-items: center; border-bottom: 2px solid var(--blue); }
+    .card-body { padding: 16px; }
+    .chart-tabs {
+      display: flex;
+      gap: 26px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+      font-weight: 750;
+    }
+    .chart-tabs button {
+      height: 34px;
+      min-height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink);
+      font-weight: 750;
+    }
+    .chart-tabs button.active {
+      color: var(--blue);
+      border-bottom: 2px solid var(--blue);
+    }
+    .chart-range {
+      width: min(390px, 100%);
+      min-height: 30px;
+      margin: 6px 0 14px auto;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: #475467;
+      font-size: 13px;
+    }
+    .chart-box {
+      min-height: 178px;
+      border-radius: 6px;
+      background:
+        repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e5e7eb 40px),
+        #fff;
+      overflow: hidden;
+    }
+    .chart-box svg {
+      width: 100%;
+      height: 178px;
+      display: block;
+    }
+    .chart-tip {
+      position: fixed;
+      z-index: 80;
+      display: none;
+      padding: 9px 10px;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, .18);
+      color: var(--ink);
+      font-size: 13px;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
+    .kv { display: grid; grid-template-columns: 140px 1fr auto; gap: 18px; align-items: center; min-height: 44px; font-size: 14px; }
+    .kv label { color: var(--muted); }
+    .kv code { font-family: inherit; color: #111827; }
+    .mini-btn { min-height: 30px; background: #3b82f6; color: #fff; border: 0; border-radius: 4px; }
+    .mini-btn.red { background: #ef6b73; }
+    .task-card { min-height: 160px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      border-radius: 999px;
+      padding: 0 10px;
+      background: #eef4ff;
+      color: var(--blue-dark);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 999px; background: #9ca3af; }
+    .running .dot { background: #22c55e; }
+    .stopped .dot { background: #9ca3af; }
+    .alert .dot { background: #f59e0b; }
+    .muted { color: var(--muted); }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, .22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.error { background: #7f1d1d; }
+    .toast.ok { background: #064e3b; }
+    .login {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    .login-box {
+      width: min(430px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 24px;
+      display: grid;
+      gap: 14px;
+    }
+    .hidden { display: none !important; }
+    @media (max-width: 1100px) {
+      .cols { grid-template-columns: 1fr; }
+      .vm-metrics { grid-template-columns: 1fr 1fr; }
+      .hero-spec { margin-left: 0; }
+      .hero-main { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <section class="login hidden" id="login-view">
+    <div class="login-box">
+      <strong>需要登录</strong>
+      <input id="token" type="password" placeholder="平台 Token">
+      <button class="primary" id="login">进入实例详情</button>
+      <span class="muted" id="login-error"></span>
+    </div>
+  </section>
+
+  <main class="page hidden" id="app">
+    <section class="cols">
+      <div>
+        <div class="hero">
+          <div class="hero-main">
+            <div class="power on" id="power-icon">▶</div>
+            <div class="hero-title">
+              <h1 id="vm-name">VM __VMID__</h1>
+              <span id="vm-subtitle">加载中</span>
+            </div>
+            <div class="hero-spec">
+              <span>CPU <strong id="vm-cpu">-</strong></span>
+              <span>内存 <strong id="vm-mem">-</strong></span>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button id="btn-stop">关机</button>
+            <button id="btn-net-down">断网</button>
+            <button id="btn-net-up">联网</button>
+            <button id="btn-restart">重启</button>
+            <button id="btn-console">控制台</button>
+            <button id="btn-config">配置</button>
+            <button id="btn-paste">凭据</button>
+            <button id="btn-start">开机</button>
+            <button id="btn-reinstall">重装系统</button>
+            <button class="danger" id="btn-delete">删除</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <span>概览</span>
+        </div>
+        <section class="vm-metrics">
+          <div class="card metric-card">
+            <span>CPU 使用率</span>
+            <strong id="metric-cpu">-</strong>
+            <small id="metric-cpu-sub">-</small>
+          </div>
+          <div class="card metric-card">
+            <span>硬盘 IO</span>
+            <strong id="metric-io">-</strong>
+            <small>读 / 写</small>
+          </div>
+          <div class="card metric-card">
+            <span>内存用量</span>
+            <strong id="metric-mem">-</strong>
+            <small id="metric-mem-sub">-</small>
+          </div>
+          <div class="card metric-card">
+            <span>网卡</span>
+            <strong id="metric-net">-</strong>
+            <small>入 / 出</small>
+          </div>
+          <div class="card metric-card">
+            <span>流量使用</span>
+            <strong id="metric-traffic">-</strong>
+            <small>累计流量</small>
+          </div>
+        </section>
+        <div class="card">
+          <div class="card-body">
+            <div class="chart-tabs" id="vm-tabs">
+              <button class="active" data-chart="cpu" type="button">CPU 使用量</button>
+              <button data-chart="io" type="button">硬盘IO</button>
+              <button data-chart="memory" type="button">内存用量</button>
+              <button data-chart="network" type="button">网卡</button>
+              <button data-chart="traffic" type="button">用量排行</button>
+              <button data-chart="gpu" type="button">显卡占用率</button>
+            </div>
+            <div class="chart-range" id="vm-range">-</div>
+            <div class="chart-box" id="vm-chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-stack">
+        <div class="card">
+          <div class="card-head"><span>流量计费统计</span><button class="secondary" id="traffic-refresh">重置流量</button></div>
+          <table>
+            <thead><tr><th>类型</th><th>流入</th><th>流出</th><th>总量</th><th>百分比</th></tr></thead>
+            <tbody id="traffic-table"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-head"><span>实例信息</span><button class="secondary" id="refresh">刷新</button></div>
+          <div class="card-body">
+            <div class="kv"><label>实例ID</label><code id="info-vmid">__VMID__</code><span></span></div>
+            <div class="kv"><label>主机名</label><code id="info-name">-</code><span></span></div>
+            <div class="kv"><label>运行状态</label><code id="info-status">-</code><span></span></div>
+            <div class="kv"><label>节点</label><code id="info-node">-</code><span></span></div>
+            <div class="kv"><label>用户密码</label><code>root/********</code><button class="mini-btn red" id="btn-cred">保存凭据</button></div>
+            <div class="kv"><label>SSH端口</label><code id="info-ssh-port">22</code><span></span></div>
+            <div class="kv"><label>NAT内网IP</label><code id="info-nat-ip">-</code><span></span></div>
+            <div class="kv"><label>NAT端口段</label><code id="info-nat-ports">-</code><span></span></div>
+            <div class="kv"><label>磁盘</label><code id="info-disk">-</code><span></span></div>
+            <div class="kv"><label>流量</label><code id="info-traffic">-</code><span></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cols">
+      <div class="card task-card">
+        <div class="card-head"><span>任务</span><a class="muted">更多</a></div>
+        <table>
+          <thead><tr><th>状态</th><th>ID</th><th>任务类型</th><th>开始时间</th><th>进度</th></tr></thead>
+          <tbody id="task-table"><tr><td colspan="5" class="muted">暂无任务记录</td></tr></tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-head"><span>弹性IP</span><button class="secondary" data-not-ready="弹性 IP 添加暂未接后端接口，请先在控制台 IP 池管理">＋</button></div>
+          <table>
+            <thead><tr><th>ID</th><th>IP地址</th><th>进带宽</th><th>出带宽</th><th>管理</th></tr></thead>
+            <tbody id="ip-table"></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-head"><span>网络管理</span><button class="secondary" data-not-ready="网卡新增暂未接后端接口">＋</button></div>
+          <table>
+            <thead><tr><th>IP/MAC</th><th>网络名称</th><th>网络类型/vlan</th><th>驱动</th><th>管理</th></tr></thead>
+            <tbody id="network-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+  <div class="chart-tip" id="chart-tip"></div>
+
+  <script>
+    const vmid = Number("__VMID__");
+    const $ = (id) => document.getElementById(id);
+    let token = sessionStorage.getItem('platformToken') || '';
+    localStorage.removeItem('platformToken');
+    let toastTimer = null;
+    let activeChart = 'cpu';
+    let vmSamples = [];
+    let lastStatus = null;
+    let lastVmRaw = null;
+    let lastTraffic = null;
+
+    function headers() {
+      return { 'Content-Type': 'application/json', 'X-API-Token': token };
+    }
+    async function api(path, options = {}) {
+      const res = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!res.ok) throw new Error(data && data.detail ? data.detail : text);
+      return data;
+    }
+    function notify(message, type = '') {
+      const toast = $('toast');
+      toast.textContent = message || '-';
+      toast.className = `toast show ${type}`.trim();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.className = 'toast';
+      }, type === 'error' ? 5200 : 2600);
+    }
+    function setBusy(button, busy, label = '处理中') {
+      if (!button) return;
+      if (busy) {
+        button.dataset.originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+      } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || button.textContent;
+        delete button.dataset.originalText;
+      }
+    }
+    async function runWithFeedback(button, pending, work, done = '操作完成') {
+      setBusy(button, true, pending);
+      notify(pending);
+      try {
+        const result = await work();
+        notify(done, 'ok');
+        return result;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        notify(message, 'error');
+        showError(message);
+        return null;
+      } finally {
+        setBusy(button, false);
+      }
+    }
+    function gb(value) {
+      const n = Number(value || 0);
+      return n >= 1000 ? `${(n / 1000).toFixed(2)}TB` : `${n.toFixed(2)}GB`;
+    }
+    function fmtMetric(value, unit) {
+      const num = Number(value || 0);
+      if (unit === '%') return `${num.toFixed(2)} %`;
+      if (unit === 'GB') return gb(num);
+      return `${num.toFixed(2)} ${unit}`;
+    }
+    function mbFromGb(value) {
+      return `${(Number(value || 0) * 1000).toFixed(2)}MB`;
+    }
+    function fmtDate(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+    }
+    function pct(used, total) {
+      if (!total) return 0;
+      return Math.max(0, Math.min(100, (Number(used) / Number(total)) * 100));
+    }
+    function optionalNumber(value) {
+      if (value === '' || value === null || value === undefined) return undefined;
+      return Number(value);
+    }
+    function chartMeta(key) {
+      return {
+        cpu: ['CPU 使用率(%)', '%', 100],
+        io: ['硬盘IO(GB)', 'GB', null],
+        memory: ['内存用量(%)', '%', 100],
+        network: ['网卡流量(GB)', 'GB', null],
+        traffic: ['总流量(GB)', 'GB', null],
+        gpu: ['显卡占用率(%)', '%', 100],
+      }[key] || ['CPU 使用率(%)', '%', 100];
+    }
+    function metricSamplesFromHistory(rows) {
+      return (Array.isArray(rows) ? rows : []).map((row) => ({
+        time: new Date(row.sampled_at),
+        cpu: Number(row.cpu_percent || 0),
+        io: Number(row.io_gb || 0),
+        memory: Number(row.memory_percent || 0),
+        network: Number(row.network_gb || 0),
+        traffic: Number(row.traffic_gb || 0),
+        gpu: Number(row.gpu_percent || 0),
+      })).filter((row) => !Number.isNaN(row.time.getTime()));
+    }
+    function addVmSample(status, values) {
+      vmSamples.push({
+        time: new Date(),
+        cpu: values.cpu,
+        io: Number(status.io?.read_gb || 0) + Number(status.io?.write_gb || 0),
+        memory: values.memPct,
+        network: values.rx + values.tx,
+        traffic: values.total,
+        gpu: 0,
+      });
+      vmSamples = vmSamples.slice(-60);
+    }
+    function renderVmChart() {
+      const samples = vmSamples.length ? vmSamples : [{ time: new Date(), cpu: 0, io: 0, memory: 0, network: 0, traffic: 0, gpu: 0 }];
+      const [label, unit, fixedMax] = chartMeta(activeChart);
+      const values = samples.map((sample) => Number(sample[activeChart] || 0));
+      const max = fixedMax || Math.max(1, ...values) * 1.15;
+      const points = values.map((value, index) => {
+        const x = 42 + index * (820 / Math.max(1, values.length - 1));
+        const y = 190 - Math.min(1, value / max) * 150;
+        return { x, y, value, time: samples[index].time };
+      });
+      const polyline = points.map((point) => `${point.x},${point.y}`).join(' ');
+      $('vm-range').textContent = `${samples[0].time.toLocaleString()} 至 ${samples[samples.length - 1].time.toLocaleString()}`;
+      $('vm-chart').innerHTML = `
+        <svg viewBox="0 0 920 210" preserveAspectRatio="none" aria-label="${label}">
+          <g stroke="#d1d5db" stroke-dasharray="4 4" stroke-width="1">
+            <line x1="42" y1="40" x2="880" y2="40" />
+            <line x1="42" y1="77" x2="880" y2="77" />
+            <line x1="42" y1="115" x2="880" y2="115" />
+            <line x1="42" y1="152" x2="880" y2="152" />
+            <line x1="42" y1="190" x2="880" y2="190" />
+          </g>
+          <text x="12" y="44" fill="#8a8f98" font-size="12">100 %</text>
+          <text x="20" y="194" fill="#8a8f98" font-size="12">0</text>
+          <polyline fill="none" stroke="#52c41a" stroke-width="3" points="${polyline}" />
+          ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="8" fill="transparent" data-chart-point data-label="${label}" data-value="${fmtMetric(point.value, unit)}" data-time="${point.time.toLocaleString()}"></circle>`).join('')}
+        </svg>
+      `;
+    }
+    function pill(status) {
+      const cls = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'alert';
+      return `<span class="pill ${cls}"><span class="dot"></span>${status || '-'}</span>`;
+    }
+    function showLogin(message = '') {
+      $('app').classList.add('hidden');
+      $('login-view').classList.remove('hidden');
+      $('login-error').textContent = message;
+      $('token').value = token;
+      $('token').focus();
+    }
+    function showApp() {
+      $('login-view').classList.add('hidden');
+      $('app').classList.remove('hidden');
+    }
+    function showError(message) {
+      $('vm-subtitle').textContent = message || '加载失败';
+      $('info-status').textContent = message || '加载失败';
+      notify(message || '加载失败', 'error');
+    }
+    async function login() {
+      token = $('token').value.trim();
+      if (!token) return showLogin('请输入平台 Token');
+      sessionStorage.setItem('platformToken', token);
+      try {
+        await api('/api/v1/auth/check');
+        showApp();
+        await load();
+        notify('登录成功', 'ok');
+      } catch (err) {
+        sessionStorage.removeItem('platformToken');
+        showLogin(err.message);
+      }
+    }
+    async function load() {
+      const [status, vmRaw, ips, history, tasks] = await Promise.all([
+        api(`/api/v1/status?vmid=${vmid}`),
+        api(`/api/v1/vms/${vmid}`),
+        api(`/api/v1/vms/${vmid}/ips`),
+        api(`/api/v1/metrics/history?vmid=${vmid}&hours=24`),
+        api(`/api/v1/vms/${vmid}/tasks?limit=30`),
+      ]);
+      vmSamples = metricSamplesFromHistory(history);
+      render(status, vmRaw, Array.isArray(ips) ? ips : []);
+      renderTasks(Array.isArray(tasks) ? tasks : []);
+    }
+    function taskName(action) {
+      return {
+        create: '创建实例',
+        start: '开机',
+        stop: '关机',
+        reboot: '重启',
+        network_disconnect: '断网',
+        network_connect: '联网',
+        traffic_limit_disconnect: '超额断网',
+        config_update: '修改配置',
+        traffic_config: '流量配置',
+        reinstall: '重装系统',
+        delete: '删除实例',
+      }[action] || action || '-';
+    }
+    function renderTasks(tasks) {
+      const tbody = $('task-table');
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无任务记录</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map((task) => `
+        <tr>
+          <td><span class="pill ${task.status === 'ok' ? 'running' : 'alert'}"><span class="dot"></span>${task.status || '-'}</span></td>
+          <td>${task.id}</td>
+          <td title="${task.message || ''}">${taskName(task.action)}</td>
+          <td>${fmtDate(task.created_at)}</td>
+          <td>${task.task_id ? '已提交' : '完成'}</td>
+        </tr>
+      `).join('');
+    }
+    function render(status, vmRaw, ips) {
+      lastStatus = status;
+      lastVmRaw = vmRaw;
+      const name = status.name || vmRaw.name || `VM ${vmid}`;
+      const running = status.status === 'running';
+      $('power-icon').textContent = running ? '▶' : '■';
+      $('power-icon').classList.toggle('on', running);
+      $('power-icon').classList.toggle('off', !running);
+      $('vm-name').textContent = name;
+      $('vm-subtitle').textContent = `VMID ${vmid} / ${status.status || '-'}`;
+      $('vm-cpu').textContent = status.cpu?.cpus || vmRaw.cpus || '-';
+      $('vm-mem').textContent = `${Math.round((status.memory?.total_gb || 0))}G`;
+      $('info-name').textContent = name;
+      $('info-status').innerHTML = pill(status.status);
+      $('info-node').textContent = status.node || '-';
+      $('info-ssh-port').textContent = status.nat?.ssh_port || 22;
+      $('info-nat-ip').textContent = status.nat?.address || '-';
+      $('info-nat-ports').textContent = status.nat ? `${status.nat.port_start}-${status.nat.port_end}` : '-';
+      $('info-disk').textContent = `${gb(status.disk?.used_gb)} / ${gb(status.disk?.total_gb)}`;
+      $('info-traffic').textContent = `${gb(status.network?.tap_traffic?.total_gb)} total`;
+      const rx = status.network?.tap_traffic?.rx_gb || status.network?.netin_gb || 0;
+      const tx = status.network?.tap_traffic?.tx_gb || status.network?.netout_gb || 0;
+      const total = Number(rx) + Number(tx);
+      const billing = status.traffic_billing || {};
+      lastTraffic = billing;
+      const cpuPct = Number(status.cpu?.usage || 0) * 100;
+      const memPct = pct(status.memory?.used_bytes, status.memory?.total_bytes);
+      const diskPct = pct(status.disk?.used_bytes, status.disk?.total_bytes);
+      $('metric-cpu').textContent = `${cpuPct.toFixed(1)}%`;
+      $('metric-cpu-sub').textContent = `${status.cpu?.cpus || vmRaw.cpus || '-'} 核`;
+      $('metric-io').textContent = `${gb(status.io?.read_gb)} / ${gb(status.io?.write_gb)}`;
+      $('metric-mem').textContent = `${gb(status.memory?.used_gb)} / ${gb(status.memory?.total_gb)}`;
+      $('metric-mem-sub').textContent = `${memPct.toFixed(1)}%`;
+      $('metric-net').textContent = `${gb(rx)} / ${gb(tx)}`;
+      $('metric-traffic').textContent = billing.quota_gb ? `${gb(billing.used_gb)} / ${gb(billing.quota_gb)}` : gb(total);
+      addVmSample(status, { cpu: cpuPct, memPct, rx: Number(rx), tx: Number(tx), total });
+      renderVmChart();
+      const rows = [
+        ['当前周期', rx, tx, billing.used_gb ?? total, billing.percent],
+        ['总额度', 0, 0, billing.quota_gb ?? 0, 100],
+        ['剩余额度', 0, 0, billing.remaining_gb ?? 0, billing.quota_gb ? Math.max(0, 100 - Number(billing.percent || 0)) : null],
+        ['下次重置', 0, 0, 0, null],
+      ];
+      $('info-traffic').textContent = billing.quota_gb ? `${gb(billing.used_gb)} / ${gb(billing.quota_gb)}，重置 ${fmtDate(billing.next_reset_at)}` : `${gb(total)} total`;
+      $('traffic-table').innerHTML = rows.map((row) => {
+        if (row[0] === '下次重置') return `<tr><td>${row[0]}</td><td colspan="3">${fmtDate(billing.next_reset_at)}</td><td>${billing.timezone || 'Asia/Shanghai'}</td></tr>`;
+        const percent = row[4] === null || row[4] === undefined ? '-' : `${Number(row[4]).toFixed(2)}%`;
+        return `<tr><td>${row[0]}</td><td>${mbFromGb(row[1])}</td><td>${mbFromGb(row[2])}</td><td>${gb(row[3])}</td><td>${percent}</td></tr>`;
+      }).join('');
+      $('ip-table').innerHTML = ips.length ? ips.map((ip, idx) => `<tr><td>${vmid}${idx}</td><td>${ip.address}</td><td>-</td><td>-</td><td><button class="primary" data-not-ready="${ip.note || '单 VM 弹性 IP 管理暂未接后端接口，请先在控制台 IP 池管理'}">管理</button></td></tr>`).join('') : '<tr><td colspan="5" class="muted">暂无绑定 IP</td></tr>';
+      $('network-table').innerHTML = `<tr><td>${status.nat?.address || ips[0]?.address || '-'}<br><span class="muted">${status.nat ? `SSH ${status.nat.ssh_port} / ${status.nat.external_host}` : 'MAC 随 PVE 配置'}</span></td><td>${status.nat?.bridge || ips[0]?.bridge || '-'}</td><td>${status.nat ? 'NAT/0' : 'VPC网络/0'}</td><td>Virtio</td><td><button class="secondary" data-not-ready="网卡编辑暂未接后端接口">编辑</button></td></tr>`;
+    }
+    async function openConsole() {
+      const data = await api('/api/v1/consoles/token', { method: 'POST', body: JSON.stringify({ vmid, ttl_seconds: 900 }) });
+      window.open(data.console_url, '_blank', 'noopener');
+      return data;
+    }
+    async function saveCred() {
+      const username = prompt(`VM ${vmid} 用户名，可留空(默认 root)`, 'root');
+      if (username === null) return;
+      const password = prompt(`VM ${vmid} 密码，可留空`);
+      if (password === null) return;
+      await api(`/api/v1/vms/${vmid}/credentials`, { method: 'PUT', body: JSON.stringify({ username: username || null, password: password || null }) });
+      return true;
+    }
+    async function updateConfig() {
+      const cores = prompt(`VM ${vmid} CPU 核心，留空不改`, lastStatus?.cpu?.cpus || lastVmRaw?.cpus || '');
+      if (cores === null) return;
+      const memory = prompt(`VM ${vmid} 内存 MB，留空不改`, lastStatus?.memory?.total_bytes ? Math.round(Number(lastStatus.memory.total_bytes) / 1024 / 1024) : '');
+      if (memory === null) return;
+      const rate = prompt(`VM ${vmid} 端口速率，留空不改`, '');
+      if (rate === null) return;
+      const quota = prompt(`VM ${vmid} 流量额度 GB，留空不改`, lastTraffic?.quota_gb || '');
+      if (quota === null) return;
+      const resetDay = prompt('每月几号重置流量，1-28', lastTraffic?.reset_day || '1');
+      if (resetDay === null) return;
+      const resetHour = prompt('几点重置流量，0-23', lastTraffic?.reset_hour || '0');
+      if (resetHour === null) return;
+      const configPayload = {
+        cores: optionalNumber(cores),
+        memory_mb: optionalNumber(memory),
+        network_rate: optionalNumber(rate),
+      };
+      Object.keys(configPayload).forEach((key) => configPayload[key] === undefined && delete configPayload[key]);
+      if (Object.keys(configPayload).length) {
+        configPayload.reboot = true;
+        await api(`/api/v1/vms/${vmid}/config`, { method: 'PUT', body: JSON.stringify(configPayload) });
+      }
+      if (quota !== '') {
+        await api(`/api/v1/vms/${vmid}/traffic`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            quota_gb: optionalNumber(quota),
+            reset_day: optionalNumber(resetDay) || 1,
+            reset_hour: optionalNumber(resetHour) || 0,
+            timezone: 'Asia/Shanghai',
+            reset_usage: false,
+          }),
+        });
+      }
+      await load();
+      return true;
+    }
+    async function resetTraffic() {
+      const quota = prompt(`VM ${vmid} 流量额度 GB`, lastTraffic?.quota_gb || '');
+      if (quota === null || quota === '') return;
+      await api(`/api/v1/vms/${vmid}/traffic`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          quota_gb: optionalNumber(quota),
+          reset_day: lastTraffic?.reset_day || 1,
+          reset_hour: lastTraffic?.reset_hour || 0,
+          timezone: lastTraffic?.timezone || 'Asia/Shanghai',
+          reset_usage: true,
+        }),
+      });
+      await load();
+      return true;
+    }
+    async function reinstallVm() {
+      const images = await api('/api/v1/reinstall/images');
+      const defaultImage = Array.isArray(images) && images.length ? images[0].image : '';
+      const image = prompt(`VM ${vmid} 重装镜像名`, defaultImage);
+      if (image === null) return;
+      if (!image.trim()) {
+        throw new Error('请先填写镜像名，或在 .env 配置 IMAGE_TEMPLATES');
+      }
+      const password = prompt(`VM ${vmid} 新 root 密码`);
+      if (password === null) return;
+      if (!password) {
+        throw new Error('重装必须填写 root 密码');
+      }
+      const currentDiskGb = lastStatus?.disk?.total_gb ? Math.ceil(Number(lastStatus.disk.total_gb)) : 40;
+      const diskSize = prompt(`VM ${vmid} 系统盘大小，例如 40G`, `${currentDiskGb || 40}G`);
+      if (diskSize === null) return;
+      const slot = prompt(`VM ${vmid} 系统盘槽位`, 'virtio0');
+      if (slot === null) return;
+      if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认删除。`)) return;
+      await api(`/api/v1/vms/${vmid}/reinstall`, {
+        method: 'POST',
+        body: JSON.stringify({
+          image: image.trim(),
+          slot: slot.trim() || 'virtio0',
+          disk_size: diskSize.trim() || undefined,
+          ci_user: 'root',
+          password,
+          start: true,
+          free_old: true,
+        }),
+      });
+      await load();
+      return true;
+    }
+    async function apiAction(path, method = 'POST') {
+      await api(path, { method, body: method === 'DELETE' ? undefined : '{}' });
+    }
+    async function action(path, method = 'POST') {
+      await apiAction(path, method);
+      await load();
+    }
+    $('login').addEventListener('click', login);
+    $('token').addEventListener('keydown', (event) => { if (event.key === 'Enter') login(); });
+    $('refresh').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新中', load, '刷新完成'));
+    $('traffic-refresh').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重置流量中', resetTraffic, '流量已重置'));
+    $('btn-console').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '打开 VNC 中', openConsole, 'VNC 已打开'));
+    $('btn-config').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '配置提交中', updateConfig, '配置已提交'));
+    $('btn-paste').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
+    $('btn-cred').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
+    $('btn-start').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '开机中', () => action(`/api/v1/vms/${vmid}/resume`), '开机任务已提交'));
+    $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '关机中', () => action(`/api/v1/vms/${vmid}/pause`), '关机任务已提交'));
+    $('btn-net-down').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '断网中', () => action(`/api/v1/vms/${vmid}/network/disconnect`), '断网已提交'));
+    $('btn-net-up').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '联网中', () => action(`/api/v1/vms/${vmid}/network/connect`), '联网已提交'));
+    $('btn-reinstall').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重装任务提交中', reinstallVm, '重装任务已提交'));
+    $('btn-restart').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '重启中', async () => {
+      await apiAction(`/api/v1/vms/${vmid}/pause`);
+      await apiAction(`/api/v1/vms/${vmid}/resume`);
+      await load();
+    }, '重启任务已提交'));
+    $('vm-tabs').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-chart]');
+      if (!button) return;
+      activeChart = button.dataset.chart;
+      for (const item of $('vm-tabs').querySelectorAll('button')) {
+        item.classList.toggle('active', item === button);
+      }
+      renderVmChart();
+    });
+    $('vm-chart').addEventListener('mousemove', (event) => {
+      const point = event.target.closest('[data-chart-point]');
+      const tip = $('chart-tip');
+      if (!point) {
+        tip.style.display = 'none';
+        return;
+      }
+      tip.textContent = `${point.dataset.time}\n● ${point.dataset.label}: ${point.dataset.value}`;
+      tip.style.left = `${event.clientX + 12}px`;
+      tip.style.top = `${event.clientY - 18}px`;
+      tip.style.display = 'block';
+    });
+    $('vm-chart').addEventListener('mouseleave', () => {
+      $('chart-tip').style.display = 'none';
+    });
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-not-ready]');
+      if (!button) return;
+      notify(button.dataset.notReady, 'error');
+    });
+    $('btn-delete').addEventListener('click', async () => {
+      if (!confirm(`删除 VM ${vmid}?`)) return;
+      const result = await runWithFeedback(
+        $('btn-delete'),
+        '删除中',
+        () => apiAction(`/api/v1/vms/${vmid}`, 'DELETE'),
+        '删除任务已提交',
+      );
+      if (result !== null) location.href = '/';
+    });
+    if (token) {
+      showApp();
+      load().catch((err) => showError(err.message));
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>

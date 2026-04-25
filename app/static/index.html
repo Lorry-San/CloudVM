@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PVETrafficManager</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ef;
+      --blue: #1d5fd7;
+      --green: #087443;
+      --red: #b42318;
+      --amber: #b54708;
+      --shadow: 0 12px 30px rgba(15, 35, 70, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, select, textarea {
+      font: inherit;
+    }
+    button {
+      min-height: 36px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 12px;
+      background: var(--blue);
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.secondary { background: #eef4ff; color: #174ea6; }
+    button.danger { background: #fee4e2; color: var(--red); }
+    button.success { background: #dcfae6; color: var(--green); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input, select, textarea {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 10px;
+      outline: none;
+    }
+    textarea { min-height: 74px; resize: vertical; }
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      background: #f8fafd;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+    .side {
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .brand {
+      display: grid;
+      gap: 4px;
+    }
+    .brand strong {
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+    .brand span, .side small {
+      color: #94a3b8;
+    }
+    .side label { color: #cbd5e1; }
+    .side input {
+      background: #111c31;
+      border-color: #26364f;
+      color: #fff;
+    }
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+    .nav a {
+      color: #dbeafe;
+      text-decoration: none;
+      padding: 9px 10px;
+      border-radius: 6px;
+    }
+    .nav a.active, .nav a:hover {
+      background: #1e293b;
+    }
+    .main {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .statusline {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .page-view {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+    .metrics {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    .two {
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .card-head {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .card-head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .card-body { padding: 16px; }
+    .metric {
+      min-height: 116px;
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      align-content: space-between;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .metric strong {
+      font-size: 25px;
+    }
+    .metric .sub {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .overview-chart {
+      padding: 16px;
+    }
+    .chart-tabs {
+      display: flex;
+      gap: 26px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+      font-weight: 750;
+    }
+    .chart-tabs button {
+      height: 34px;
+      min-height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink);
+      font-weight: 750;
+    }
+    .chart-tabs button.active {
+      color: var(--blue);
+      border-bottom: 2px solid var(--blue);
+    }
+    .chart-range {
+      width: min(390px, 100%);
+      min-height: 30px;
+      margin: 6px 0 14px auto;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: #475467;
+      font-size: 13px;
+    }
+    .chart-box {
+      min-height: 300px;
+      border-radius: 6px;
+      background:
+        repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e5e7eb 40px),
+        #fff;
+      overflow: hidden;
+    }
+    .chart-box svg {
+      width: 100%;
+      height: 300px;
+      display: block;
+    }
+    .chart-tip {
+      position: fixed;
+      z-index: 80;
+      display: none;
+      padding: 9px 10px;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      color: var(--ink);
+      font-size: 13px;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e6edf7;
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--blue);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .form-grid .wide { grid-column: span 3; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 74px;
+      height: 24px;
+      border-radius: 999px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .pill.running { background: #dcfae6; color: var(--green); }
+    .pill.stopped { background: #f2f4f7; color: #475467; }
+    .pill.alert { background: #fef0c7; color: var(--amber); }
+    .log {
+      min-height: 42px;
+      max-height: 160px;
+      overflow: auto;
+      background: #0f172a;
+      color: #d1e9ff;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .empty {
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, .22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.error { background: #7f1d1d; }
+    .toast.ok { background: #064e3b; }
+    .hidden { display: none !important; }
+    .login {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        linear-gradient(135deg, rgba(15, 23, 42, .96), rgba(29, 95, 215, .82)),
+        #0f172a;
+    }
+    .login-card {
+      width: min(440px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .22);
+      padding: 26px;
+      display: grid;
+      gap: 18px;
+    }
+    .login-card h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .login-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+    .icon {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+      border-radius: 4px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 13px;
+      vertical-align: -4px;
+    }
+    .tree-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      border-radius: 3px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-size: 12px;
+      vertical-align: -3px;
+    }
+    .dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      margin-right: 6px;
+      background: #98a2b3;
+    }
+    .dot.running { background: #12b76a; }
+    .dot.stopped { background: #98a2b3; }
+    .dot.alert { background: #f79009; }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .metrics, .two { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .form-grid .wide { grid-column: span 2; }
+    }
+    @media (max-width: 680px) {
+      .main { padding: 14px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .form-grid, .form-grid .wide { grid-template-columns: 1fr; grid-column: span 1; }
+      th, td { min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <section class="login" id="login-view">
+    <div class="login-card">
+      <div>
+        <h1>PVETrafficManager</h1>
+        <p>输入平台 Token 后进入控制台</p>
+      </div>
+      <label>
+        平台 Token
+        <input id="login-token" type="password" autocomplete="off" autofocus>
+      </label>
+      <button id="login-button">登录</button>
+      <div class="statusline" id="login-error"></div>
+    </div>
+  </section>
+  <div class="toast" id="toast"></div>
+
+  <div class="shell hidden" id="app-view">
+    <aside class="side">
+      <div class="brand">
+        <strong>PVETrafficManager</strong>
+        <span>Platform Console</span>
+      </div>
+      <div class="actions">
+        <button id="logout" class="danger">退出</button>
+        <button class="secondary" id="reload">刷新</button>
+      </div>
+      <nav class="nav">
+        <a class="active" href="#overview" data-nav="overview">总览</a>
+        <a href="#vms" data-nav="vms">虚拟机</a>
+        <a href="#ips" data-nav="ips">IP 池</a>
+      </nav>
+      <small id="last-refresh">未刷新</small>
+    </aside>
+
+    <main class="main">
+      <section class="page-view" id="page-overview" data-page="overview">
+        <div class="topbar" id="overview">
+          <div>
+            <h1><span class="icon">▣</span>总览</h1>
+            <div class="statusline" id="summary">等待连接</div>
+          </div>
+        </div>
+
+        <section class="grid metrics">
+          <div class="card metric">
+            <span><span class="icon">C</span>CPU 使用率</span>
+            <strong id="cpu-value">-</strong>
+            <div class="bar"><i id="cpu-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">M</span>内存使用</span>
+            <strong id="mem-value">-</strong>
+            <div class="bar"><i id="mem-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">D</span>硬盘使用</span>
+            <strong id="disk-value">-</strong>
+            <div class="bar"><i id="disk-bar"></i></div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">I</span>硬盘 IO</span>
+            <strong id="io-value">-</strong>
+            <div class="sub" id="io-sub">-</div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">N</span>网络带宽</span>
+            <strong id="net-value">-</strong>
+            <div class="sub" id="net-sub">-</div>
+          </div>
+          <div class="card metric">
+            <span><span class="icon">T</span>流量使用</span>
+            <strong id="traffic-value">-</strong>
+            <div class="sub" id="traffic-sub">累计进出</div>
+          </div>
+        </section>
+
+        <section class="card overview-chart">
+          <div class="chart-tabs" id="overview-tabs">
+            <button class="active" data-chart="cpu" type="button">CPU 使用量</button>
+            <button data-chart="io" type="button">硬盘IO</button>
+            <button data-chart="memory" type="button">内存用量</button>
+            <button data-chart="network" type="button">网卡</button>
+            <button data-chart="traffic" type="button">用量排行</button>
+            <button data-chart="gpu" type="button">显卡占用率</button>
+          </div>
+          <div class="chart-range" id="overview-range">-</div>
+          <div class="chart-box" id="overview-chart"></div>
+        </section>
+      </section>
+
+      <section class="page-view hidden" id="page-vms" data-page="vms">
+        <div class="card">
+          <div class="card-head">
+            <h2><span class="tree-icon">▣</span>虚拟机</h2>
+            <div class="actions">
+              <input id="vmid-filter" placeholder="VMID 状态查询" inputmode="numeric">
+              <button class="secondary" id="load-vm-status">查看</button>
+              <button id="create-vm-link" type="button">新建 VM</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>VMID</th>
+                  <th>名称</th>
+                  <th>状态</th>
+                  <th>CPU</th>
+                  <th>内存</th>
+                  <th>流量</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="vm-table"></tbody>
+            </table>
+          </div>
+          <div class="empty hidden" id="vm-empty">暂无 VM</div>
+        </div>
+      </section>
+
+      <section class="page-view hidden" id="page-create" data-page="create">
+        <div class="card">
+          <div class="card-head">
+            <h2><span class="tree-icon">＋</span>新建 VM</h2>
+            <button class="secondary" id="back-to-vms" type="button">返回虚拟机</button>
+          </div>
+          <div class="card-body">
+            <form id="create-form" class="form-grid">
+              <label>名称<input name="name" required placeholder="debian-001"></label>
+              <label>镜像<select name="image" id="image-select"></select></label>
+              <label>VMID<input name="vmid" inputmode="numeric" placeholder="自动"></label>
+              <label>CPU 核心<input name="cores" type="number" min="1" value="2"></label>
+              <label>内存 MB<input name="memory_mb" type="number" min="256" value="2048"></label>
+              <label>磁盘 GB<input name="disk_gb" type="number" min="1" value="40"></label>
+              <label>存储<input name="storage" placeholder="默认"></label>
+              <label>网络模式<select name="network_mode"><option value="nat" selected>NAT</option><option value="public">公网桥接</option></select></label>
+              <label>网桥<input name="bridge" placeholder="vmbr0"></label>
+              <label>端口速率<input name="rate" type="number" step="0.1" placeholder="不限制"></label>
+              <label>流量额度 GB<input name="traffic_limit_gb" type="number" min="1" step="1" placeholder="不限制"></label>
+              <label>重置日<input name="traffic_reset_day" type="number" min="1" max="28" value="1"></label>
+              <label>重置小时<input name="traffic_reset_hour" type="number" min="0" max="23" value="0"></label>
+              <label>系统用户<input name="ci_user" placeholder="可留空"></label>
+              <label>系统密码<input name="ci_password" type="password" autocomplete="new-password" placeholder="可留空"></label>
+              <label>DNS<input name="nameserver" placeholder="可留空"></label>
+              <label class="wide">SSH 公钥<textarea name="ssh_keys" placeholder="可留空"></textarea></label>
+              <label class="wide">手动 IP 配置<input name="ip_config" placeholder="留空则从 IP 池随机分配"></label>
+              <div class="actions wide">
+                <button type="submit">创建并开机</button>
+                <label style="display:flex;align-items:center;gap:8px;width:auto;color:var(--ink)">
+                  <input name="allocate_ip" type="checkbox" checked style="width:18px;min-height:18px"> 分配 IP
+                </label>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-view hidden" id="page-ips" data-page="ips">
+        <div class="card">
+          <div class="card-head">
+            <h2><span class="tree-icon">⇄</span>IP 池</h2>
+            <button class="secondary" id="refresh-ips">刷新</button>
+          </div>
+          <div class="card-body">
+            <form id="ip-form" class="form-grid">
+              <label class="wide">IP 列表<input name="addresses" placeholder="用英文逗号分隔"></label>
+              <label>CIDR<input name="cidr" type="number" min="1" max="128" placeholder="24"></label>
+              <label>网关<input name="gateway" placeholder="必填"></label>
+              <label>DNS<input name="nameserver" placeholder="可留空"></label>
+              <label>网桥<input name="bridge" placeholder="可留空"></label>
+              <label>备注<input name="note"></label>
+              <div class="actions wide"><button type="submit">加入 IP 池</button></div>
+            </form>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>IP</th>
+                  <th>CIDR</th>
+                  <th>状态</th>
+                  <th>VMID</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="ip-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="chart-tip" id="chart-tip"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      token: sessionStorage.getItem('platformToken') || '',
+      vms: [],
+      images: [],
+      ips: [],
+      hostSamples: [],
+      activeChart: 'cpu',
+    };
+    localStorage.removeItem('platformToken');
+    $('login-token').value = state.token;
+    let toastTimer = null;
+
+    function headers() {
+      return {
+        'Content-Type': 'application/json',
+        'X-API-Token': state.token,
+      };
+    }
+
+    function log(value) {
+      notify(typeof value === 'string' ? value : safeSummary(value));
+    }
+
+    function currentPage() {
+      const page = (window.location.hash || '#overview').replace('#', '');
+      return ['overview', 'vms', 'ips', 'create'].includes(page) ? page : 'overview';
+    }
+
+    function showPage(page = currentPage()) {
+      for (const view of document.querySelectorAll('[data-page]')) {
+        view.classList.toggle('hidden', view.dataset.page !== page);
+      }
+      for (const link of document.querySelectorAll('[data-nav]')) {
+        link.classList.toggle('active', link.dataset.nav === page);
+      }
+    }
+
+    function notify(message, type = '') {
+      const toast = $('toast');
+      toast.textContent = message || '-';
+      toast.className = `toast show ${type}`.trim();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.className = 'toast';
+      }, type === 'error' ? 5200 : 2600);
+    }
+
+    function setBusy(button, busy, label = '处理中') {
+      if (!button) return;
+      if (busy) {
+        button.dataset.originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+      } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || button.textContent;
+        delete button.dataset.originalText;
+      }
+    }
+
+    async function runWithFeedback(button, pending, work, done = '操作完成') {
+      setBusy(button, true, pending);
+      notify(pending);
+      try {
+        const result = await work();
+        notify(done, 'ok');
+        return result;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        notify(message, 'error');
+        log(message);
+        return null;
+      } finally {
+        setBusy(button, false);
+      }
+    }
+
+    function safeSummary(value) {
+      if (!value || typeof value !== 'object') return '-';
+      if (value.scope === 'host') {
+        return [
+          `宿主机: ${value.node || '-'}`,
+          `CPU: ${(Number(value.cpu?.usage || 0) * 100).toFixed(1)}%`,
+          `内存: ${fmtGb(value.memory?.used_gb)} / ${fmtGb(value.memory?.total_gb)}`,
+          `磁盘: ${fmtGb(value.disk?.used_gb)} / ${fmtGb(value.disk?.total_gb)}`,
+          `网络: ${fmtGb(value.network?.rx_gb)} ↓ / ${fmtGb(value.network?.tx_gb)} ↑`,
+        ].join('\n');
+      }
+      if (value.scope === 'vm') {
+        return [
+          `VMID: ${value.vmid}`,
+          `名称: ${value.name || '-'}`,
+          `状态: ${value.status || '-'}`,
+          `CPU: ${(Number(value.cpu?.usage || 0) * 100).toFixed(1)}%`,
+          `内存: ${fmtGb(value.memory?.used_gb)} / ${fmtGb(value.memory?.total_gb)}`,
+          `流量: ${fmtGb(value.network?.tap_traffic?.total_gb)} total`,
+        ].join('\n');
+      }
+      if (value.vmid) return `任务已提交\nVMID: ${value.vmid}\n状态: ${value.status || 'accepted'}`;
+      if (value.console_url) return `VNC 链接已生成\nVMID: ${value.vmid}\n有效期: ${value.expires_at || '-'}`;
+      if (Array.isArray(value)) return `完成，共 ${value.length} 条记录`;
+      return '操作完成';
+    }
+
+    function fmtGb(value) {
+      const num = Number(value || 0);
+      if (num >= 1000) return `${(num / 1000).toFixed(2)} TB`;
+      return `${num.toFixed(2)} GB`;
+    }
+
+    function fmtMetric(value, unit) {
+      const num = Number(value || 0);
+      if (unit === '%') return `${num.toFixed(2)} %`;
+      if (unit === 'GB') return fmtGb(num);
+      return `${num.toFixed(2)} ${unit}`;
+    }
+
+    function pct(used, total) {
+      if (!total) return 0;
+      return Math.max(0, Math.min(100, (Number(used) / Number(total)) * 100));
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: { ...headers(), ...(options.headers || {}) },
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!res.ok) {
+        const detail = data && data.detail ? data.detail : text;
+        throw new Error(`${res.status} ${detail}`);
+      }
+      return data;
+    }
+
+    function setMetric(id, barId, value, percent) {
+      $(id).textContent = value;
+      if (barId) $(barId).style.width = `${Math.round(percent)}%`;
+    }
+
+    function renderHost(status) {
+      const cpu = Number(status.cpu?.usage || 0) * 100;
+      const memPct = pct(status.memory?.used_bytes, status.memory?.total_bytes);
+      const diskPct = pct(status.disk?.used_bytes, status.disk?.total_bytes);
+      const rx = Number(status.network?.rx_gb || 0);
+      const tx = Number(status.network?.tx_gb || 0);
+      setMetric('cpu-value', 'cpu-bar', `${cpu.toFixed(1)}%`, cpu);
+      setMetric('mem-value', 'mem-bar', `${fmtGb(status.memory?.used_gb)} / ${fmtGb(status.memory?.total_gb)}`, memPct);
+      setMetric('disk-value', 'disk-bar', `${fmtGb(status.disk?.used_gb)} / ${fmtGb(status.disk?.total_gb)}`, diskPct);
+      $('io-value').textContent = `${fmtGb(status.io?.read_gb)} / ${fmtGb(status.io?.write_gb)}`;
+      $('io-sub').textContent = '读 / 写';
+      $('net-value').textContent = `${fmtGb(rx)} / ${fmtGb(tx)}`;
+      $('net-sub').textContent = '入 / 出';
+      $('traffic-value').textContent = fmtGb(rx + tx);
+      $('traffic-sub').textContent = '累计流量';
+      const natSummary = status.nat?.enabled ? `，NAT ${status.nat.bridge} / 已分配 ${status.nat.leased}` : '';
+      $('summary').textContent = `${status.node || 'node'} 在线，运行 ${Math.floor((status.uptime || 0) / 3600)} 小时${natSummary}`;
+      addHostSample(status, { cpu, memPct, diskPct, rx, tx });
+      renderOverviewChart();
+    }
+
+    function addHostSample(status, values) {
+      const now = new Date();
+      state.hostSamples.push({
+        time: now,
+        cpu: values.cpu,
+        io: Number(status.io?.read_gb || 0) + Number(status.io?.write_gb || 0),
+        memory: values.memPct,
+        network: values.rx + values.tx,
+        traffic: values.rx + values.tx,
+        gpu: 0,
+      });
+      state.hostSamples = state.hostSamples.slice(-60);
+    }
+
+    function chartMeta(key) {
+      return {
+        cpu: ['CPU 使用率(%)', '%', 100],
+        io: ['硬盘IO(GB)', 'GB', null],
+        memory: ['内存用量(%)', '%', 100],
+        network: ['网卡流量(GB)', 'GB', null],
+        traffic: ['总流量(GB)', 'GB', null],
+        gpu: ['显卡占用率(%)', '%', 100],
+      }[key] || ['CPU 使用率(%)', '%', 100];
+    }
+
+    function metricSamplesFromHistory(rows) {
+      return (Array.isArray(rows) ? rows : []).map((row) => ({
+        time: new Date(row.sampled_at),
+        cpu: Number(row.cpu_percent || 0),
+        io: Number(row.io_gb || 0),
+        memory: Number(row.memory_percent || 0),
+        network: Number(row.network_gb || 0),
+        traffic: Number(row.traffic_gb || 0),
+        gpu: Number(row.gpu_percent || 0),
+      })).filter((row) => !Number.isNaN(row.time.getTime()));
+    }
+
+    function chartPoints(samples, key, maxValue) {
+      const values = samples.map((sample) => Number(sample[key] || 0));
+      const max = maxValue || Math.max(1, ...values) * 1.15;
+      return values.map((value, index) => {
+        const x = 42 + index * (820 / Math.max(1, values.length - 1));
+        const y = 260 - Math.min(1, value / max) * 220;
+        return { x, y, value, time: samples[index].time };
+      });
+    }
+
+    function renderOverviewChart() {
+      const samples = state.hostSamples.length ? state.hostSamples : [{ time: new Date(), cpu: 0, io: 0, memory: 0, network: 0, traffic: 0, gpu: 0 }];
+      const [label, unit, fixedMax] = chartMeta(state.activeChart);
+      const points = chartPoints(samples, state.activeChart, fixedMax);
+      const polyline = points.map((point) => `${point.x},${point.y}`).join(' ');
+      const first = samples[0].time.toLocaleString();
+      const last = samples[samples.length - 1].time.toLocaleString();
+      $('overview-range').textContent = `${first} 至 ${last}`;
+      $('overview-chart').innerHTML = `
+        <svg viewBox="0 0 920 300" preserveAspectRatio="none" aria-label="${label}">
+          <g stroke="#d1d5db" stroke-dasharray="4 4" stroke-width="1">
+            <line x1="42" y1="40" x2="880" y2="40" />
+            <line x1="42" y1="95" x2="880" y2="95" />
+            <line x1="42" y1="150" x2="880" y2="150" />
+            <line x1="42" y1="205" x2="880" y2="205" />
+            <line x1="42" y1="260" x2="880" y2="260" />
+          </g>
+          <text x="12" y="44" fill="#8a8f98" font-size="12">100 %</text>
+          <text x="20" y="264" fill="#8a8f98" font-size="12">0</text>
+          <polyline fill="none" stroke="#52c41a" stroke-width="3" points="${polyline}" />
+          ${points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="8" fill="transparent" data-chart-point data-label="${label}" data-value="${fmtMetric(point.value, unit)}" data-time="${point.time.toLocaleString()}"></circle>`).join('')}
+        </svg>
+      `;
+    }
+
+    function vmPill(status) {
+      const cls = status === 'running' ? 'running' : status === 'stopped' ? 'stopped' : 'alert';
+      return `<span class="pill ${cls}"><span class="dot ${cls}"></span>${status || '-'}</span>`;
+    }
+
+    function renderVms() {
+      const tbody = $('vm-table');
+      tbody.innerHTML = '';
+      $('vm-empty').classList.toggle('hidden', state.vms.length > 0);
+      for (const vm of state.vms) {
+        const cpu = `${(Number(vm.cpu || 0) * 100).toFixed(1)}%`;
+        const mem = `${fmtGb((Number(vm.mem || 0) / 1_000_000_000))} / ${fmtGb((Number(vm.maxmem || 0) / 1_000_000_000))}`;
+        const net = `${fmtGb((Number(vm.netin || 0) + Number(vm.netout || 0)) / 1_000_000_000)}`;
+        const natText = vm.nat ? ` / NAT ${vm.nat.address} / SSH ${vm.nat.ssh_port}` : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${vm.vmid}</td>
+          <td title="${(vm.name || '') + natText}">${vm.name || '-'}${vm.network_mode === 'nat' ? ' [NAT]' : ''}</td>
+          <td>${vmPill(vm.status)}</td>
+          <td>${cpu}</td>
+          <td title="${mem}">${mem}</td>
+          <td>${net}</td>
+          <td>
+            <div class="actions">
+              <button class="secondary" data-action="detail" data-vmid="${vm.vmid}">状态</button>
+              <button class="success" data-action="console" data-vmid="${vm.vmid}">VNC</button>
+              <button class="secondary" data-action="config" data-vmid="${vm.vmid}">配置</button>
+              <button class="secondary" data-action="credentials" data-vmid="${vm.vmid}">凭据</button>
+              <button class="secondary" data-action="start" data-vmid="${vm.vmid}">启动</button>
+              <button class="secondary" data-action="stop" data-vmid="${vm.vmid}">关机</button>
+              <button class="secondary" data-action="reinstall" data-vmid="${vm.vmid}">重装</button>
+              <button class="danger" data-action="delete" data-vmid="${vm.vmid}">删除</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderImages() {
+      const select = $('image-select');
+      select.innerHTML = '';
+      for (const item of state.images) {
+        const opt = document.createElement('option');
+        opt.value = item.image;
+        opt.textContent = `${item.image} (${item.template_vmid})`;
+        select.appendChild(opt);
+      }
+      if (!state.images.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '手动 template_vmid';
+        select.appendChild(opt);
+      }
+    }
+
+    function renderIps() {
+      const tbody = $('ip-table');
+      tbody.innerHTML = '';
+      for (const ip of state.ips) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${ip.address}</td>
+          <td>${ip.cidr}</td>
+          <td>${vmPill(ip.status)}</td>
+          <td>${ip.vmid || '-'}</td>
+          <td><button class="secondary" data-action="release-ip" data-ip="${ip.address}">释放</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadAll() {
+      if (!state.token) {
+        showLogin('请先登录');
+        return;
+      }
+      log('正在加载数据...');
+      const [hostResult, vmsResult, imagesResult, ipsResult, historyResult] = await Promise.allSettled([
+        api('/api/v1/status'),
+        api('/api/v1/vms'),
+        api('/api/v1/images'),
+        api('/api/v1/ip-pool'),
+        api('/api/v1/metrics/history?hours=24'),
+      ]);
+      if (historyResult.status === 'fulfilled') {
+        state.hostSamples = metricSamplesFromHistory(historyResult.value);
+      }
+      if (hostResult.status === 'fulfilled') {
+        renderHost(hostResult.value);
+      } else {
+        log(`宿主机状态加载失败: ${hostResult.reason.message}`);
+      }
+      const vms = vmsResult.status === 'fulfilled' ? vmsResult.value : [];
+      const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+      const ips = ipsResult.status === 'fulfilled' ? ipsResult.value : [];
+      state.vms = Array.isArray(vms) ? vms.sort((a, b) => a.vmid - b.vmid) : [];
+      state.images = images || [];
+      state.ips = ips || [];
+      renderVms();
+      renderImages();
+      renderIps();
+      $('last-refresh').textContent = `刷新于 ${new Date().toLocaleTimeString()}`;
+      if (hostResult.status === 'fulfilled') {
+        log('已刷新');
+        notify('数据已刷新', 'ok');
+      }
+    }
+
+    function showApp() {
+      $('login-view').classList.add('hidden');
+      $('app-view').classList.remove('hidden');
+      $('login-error').textContent = '';
+      showPage();
+    }
+
+    function showLogin(message = '') {
+      $('app-view').classList.add('hidden');
+      $('login-view').classList.remove('hidden');
+      $('login-error').textContent = message;
+      $('login-token').focus();
+    }
+
+    async function login() {
+      state.token = $('login-token').value.trim();
+      if (!state.token) {
+        showLogin('请输入平台 Token');
+        return;
+      }
+      $('login-button').disabled = true;
+      $('login-button').textContent = '登录中';
+      $('login-error').textContent = '正在验证 Token...';
+      sessionStorage.setItem('platformToken', state.token);
+      try {
+        await api('/api/v1/auth/check');
+        showApp();
+        await loadAll();
+      } catch (err) {
+        sessionStorage.removeItem('platformToken');
+        state.token = '';
+        showLogin(err.message);
+      } finally {
+        $('login-button').disabled = false;
+        $('login-button').textContent = '登录';
+      }
+    }
+
+    async function loadVmStatus(vmid) {
+      const data = await api(`/api/v1/status?vmid=${encodeURIComponent(vmid)}`);
+      log(data);
+      notify(`VM ${vmid} 状态已更新`, 'ok');
+    }
+
+    async function vmAction(action, vmid) {
+      if (action === 'status') return loadVmStatus(vmid);
+      if (action === 'detail') {
+        location.href = `/vm/${encodeURIComponent(vmid)}`;
+        notify(`已打开 VM ${vmid} 详情`, 'ok');
+        return;
+      }
+      if (action === 'credentials') {
+        const username = prompt(`VM ${vmid} 用户名，可留空`);
+        if (username === null) return;
+        const password = prompt(`VM ${vmid} 密码，可留空`);
+        if (password === null) return;
+        log(await api(`/api/v1/vms/${vmid}/credentials`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            username: username || null,
+            password: password || null,
+          }),
+        }));
+        notify(`VM ${vmid} 凭据已保存`, 'ok');
+        return;
+      }
+      if (action === 'config') {
+        const vm = state.vms.find((item) => String(item.vmid) === String(vmid)) || {};
+        const cores = prompt(`VM ${vmid} CPU 核心，留空不改`, vm.cpus || '');
+        if (cores === null) return;
+        const memory = prompt(`VM ${vmid} 内存 MB，留空不改`, vm.maxmem ? Math.round(Number(vm.maxmem) / 1024 / 1024) : '');
+        if (memory === null) return;
+        const rate = prompt(`VM ${vmid} 端口速率，留空不改`, '');
+        if (rate === null) return;
+        const quota = prompt(`VM ${vmid} 流量额度 GB，留空不改`, '');
+        if (quota === null) return;
+        const resetDay = prompt('每月几号重置流量，1-28', '1');
+        if (resetDay === null) return;
+        const resetHour = prompt('几点重置流量，0-23', '0');
+        if (resetHour === null) return;
+        const configPayload = {
+          cores: optionalNumber(cores),
+          memory_mb: optionalNumber(memory),
+          network_rate: optionalNumber(rate),
+        };
+        Object.keys(configPayload).forEach((key) => configPayload[key] === undefined && delete configPayload[key]);
+        if (Object.keys(configPayload).length) {
+          configPayload.reboot = true;
+          log(await api(`/api/v1/vms/${vmid}/config`, {
+            method: 'PUT',
+            body: JSON.stringify(configPayload),
+          }));
+        }
+        if (quota !== '') {
+          log(await api(`/api/v1/vms/${vmid}/traffic`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              quota_gb: optionalNumber(quota),
+              reset_day: optionalNumber(resetDay) || 1,
+              reset_hour: optionalNumber(resetHour) || 0,
+              timezone: 'Asia/Shanghai',
+              reset_usage: false,
+            }),
+          }));
+        }
+        notify(`VM ${vmid} 配置已提交`, 'ok');
+        await loadAll();
+        return;
+      }
+      if (action === 'console') {
+        const data = await api('/api/v1/consoles/token', {
+          method: 'POST',
+          body: JSON.stringify({ vmid: Number(vmid), ttl_seconds: 900 }),
+        });
+        window.open(data.console_url, '_blank', 'noopener');
+        log(`VNC 链接已生成\nVMID: ${vmid}\n有效期: ${data.expires_at || '-'}`);
+        notify(`VM ${vmid} VNC 已打开`, 'ok');
+        return;
+      }
+      if (action === 'reinstall') {
+        const vm = state.vms.find((item) => String(item.vmid) === String(vmid)) || {};
+        const defaultImage = state.images[0]?.image || '';
+        const image = prompt(`VM ${vmid} 重装镜像名`, defaultImage);
+        if (image === null) return;
+        if (!image.trim()) {
+          notify('请先填写镜像名，或在 .env 配置 IMAGE_TEMPLATES', 'error');
+          return;
+        }
+        const password = prompt(`VM ${vmid} 新 root 密码`);
+        if (password === null) return;
+        if (!password) {
+          notify('重装必须填写 root 密码', 'error');
+          return;
+        }
+        const currentDiskGb = vm.maxdisk ? Math.ceil(Number(vm.maxdisk) / 1024 / 1024 / 1024) : 40;
+        const diskSize = prompt(`VM ${vmid} 系统盘大小，例如 40G`, `${currentDiskGb || 40}G`);
+        if (diskSize === null) return;
+        const slot = prompt(`VM ${vmid} 系统盘槽位`, 'virtio0');
+        if (slot === null) return;
+        if (!confirm(`确认重装 VM ${vmid}？\n会先关机，复制模板系统盘，重写 cloud-init，然后开机。旧系统盘默认删除。`)) return;
+        log(await api(`/api/v1/vms/${vmid}/reinstall`, {
+          method: 'POST',
+          body: JSON.stringify({
+            image: image.trim(),
+            slot: slot.trim() || 'virtio0',
+            disk_size: diskSize.trim() || undefined,
+            ci_user: 'root',
+            password,
+            start: true,
+            free_old: true,
+          }),
+        }));
+        notify(`VM ${vmid} 重装任务已提交`, 'ok');
+      }
+      if (action === 'delete') {
+        if (!confirm(`删除 VM ${vmid}?`)) return;
+        log(await api(`/api/v1/vms/${vmid}`, { method: 'DELETE' }));
+        notify(`VM ${vmid} 删除任务已提交`, 'ok');
+      }
+      if (action === 'start') {
+        log(await api(`/api/v1/vms/${vmid}/resume`, { method: 'POST', body: '{}' }));
+        notify(`VM ${vmid} 启动任务已提交`, 'ok');
+      }
+      if (action === 'stop') {
+        log(await api(`/api/v1/vms/${vmid}/pause`, { method: 'POST', body: '{}' }));
+        notify(`VM ${vmid} 关机任务已提交`, 'ok');
+      }
+      await loadAll();
+    }
+
+    function formValue(form, name) {
+      const value = new FormData(form).get(name);
+      return typeof value === 'string' ? value.trim() : value;
+    }
+
+    function optionalNumber(value) {
+      if (value === '' || value === null || value === undefined) return undefined;
+      return Number(value);
+    }
+
+    $('login-button').addEventListener('click', () => login());
+    $('login-token').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') login();
+    });
+    $('logout').addEventListener('click', () => {
+      sessionStorage.removeItem('platformToken');
+      state.token = '';
+      showLogin('已退出');
+    });
+
+    $('reload').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新中', loadAll, '刷新完成'));
+    $('refresh-ips').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '刷新 IP 池中', loadAll, 'IP 池已刷新'));
+    $('create-vm-link').addEventListener('click', () => {
+      window.location.hash = '#create';
+    });
+    $('back-to-vms').addEventListener('click', () => {
+      window.location.hash = '#vms';
+    });
+    window.addEventListener('hashchange', () => showPage());
+    $('load-vm-status').addEventListener('click', (event) => {
+      const vmid = $('vmid-filter').value.trim();
+      if (!vmid) {
+        notify('请输入 VMID', 'error');
+        return;
+      }
+      location.href = `/vm/${encodeURIComponent(vmid)}`;
+    });
+
+    $('overview-tabs').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-chart]');
+      if (!button) return;
+      state.activeChart = button.dataset.chart;
+      for (const item of $('overview-tabs').querySelectorAll('button')) {
+        item.classList.toggle('active', item === button);
+      }
+      renderOverviewChart();
+    });
+
+    $('overview-chart').addEventListener('mousemove', (event) => {
+      const point = event.target.closest('[data-chart-point]');
+      const tip = $('chart-tip');
+      if (!point) {
+        tip.style.display = 'none';
+        return;
+      }
+      tip.textContent = `${point.dataset.time}\n● ${point.dataset.label}: ${point.dataset.value}`;
+      tip.style.left = `${event.clientX + 12}px`;
+      tip.style.top = `${event.clientY - 18}px`;
+      tip.style.display = 'block';
+    });
+    $('overview-chart').addEventListener('mouseleave', () => {
+      $('chart-tip').style.display = 'none';
+    });
+
+    $('vm-table').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const label = button.textContent.trim() || '操作';
+      runWithFeedback(button, `${label}中`, () => vmAction(button.dataset.action, button.dataset.vmid), `${label}完成`);
+    });
+
+    $('ip-table').addEventListener('click', async (event) => {
+      const button = event.target.closest('button[data-action="release-ip"]');
+      if (!button) return;
+      runWithFeedback(button, '释放中', async () => {
+        log(await api(`/api/v1/ip-pool/${encodeURIComponent(button.dataset.ip)}/release`, {
+          method: 'POST',
+          body: '{}',
+        }));
+        await loadAll();
+      }, 'IP 已释放');
+    });
+
+    $('create-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const rate = optionalNumber(formValue(form, 'rate'));
+      const payload = {
+        name: formValue(form, 'name'),
+        image: formValue(form, 'image') || undefined,
+        vmid: optionalNumber(formValue(form, 'vmid')),
+        cores: optionalNumber(formValue(form, 'cores')) || 1,
+        memory_mb: optionalNumber(formValue(form, 'memory_mb')) || 1024,
+        disk_gb: optionalNumber(formValue(form, 'disk_gb')),
+        storage: formValue(form, 'storage') || undefined,
+        bridge: formValue(form, 'bridge') || undefined,
+        network: {
+          mode: formValue(form, 'network_mode') || 'nat',
+          ...(rate ? { rate } : {}),
+        },
+        traffic_limit_gb: optionalNumber(formValue(form, 'traffic_limit_gb')),
+        traffic_reset_day: optionalNumber(formValue(form, 'traffic_reset_day')) || 1,
+        traffic_reset_hour: optionalNumber(formValue(form, 'traffic_reset_hour')) || 0,
+        traffic_reset_timezone: 'Asia/Shanghai',
+        ci_user: formValue(form, 'ci_user') || undefined,
+        ci_password: formValue(form, 'ci_password') || undefined,
+        ssh_keys: formValue(form, 'ssh_keys') || undefined,
+        ip_config: formValue(form, 'ip_config') || undefined,
+        nameserver: formValue(form, 'nameserver') || undefined,
+        allocate_ip: (formValue(form, 'network_mode') || 'nat') === 'public'
+          ? Boolean(new FormData(form).get('allocate_ip'))
+          : false,
+        start: true,
+      };
+      Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
+      await runWithFeedback(button, '创建中', async () => {
+        log(await api('/api/v1/vms', { method: 'POST', body: JSON.stringify(payload) }));
+        await loadAll();
+        window.location.hash = '#vms';
+      }, '创建任务已提交');
+    });
+
+    $('ip-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const addresses = formValue(form, 'addresses')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const payload = {
+        addresses,
+        cidr: optionalNumber(formValue(form, 'cidr')) || 24,
+        gateway: formValue(form, 'gateway'),
+        nameserver: formValue(form, 'nameserver') || undefined,
+        bridge: formValue(form, 'bridge') || undefined,
+        note: formValue(form, 'note') || undefined,
+      };
+      await runWithFeedback(button, '加入 IP 池中', async () => {
+        log(await api('/api/v1/ip-pool', { method: 'POST', body: JSON.stringify(payload) }));
+        await loadAll();
+      }, 'IP 池已更新');
+    });
+
+    if (state.token) {
+      login();
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>
