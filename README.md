@@ -323,6 +323,20 @@ systemctl restart cloudvm
 systemctl status cloudvm --no-pager -l
 ```
 
+## Cloud Image Script
+
+You can download and optionally customize an official cloud image with:
+
+```bash
+bash scripts/download-cloud-image.sh debian-12 \
+  --enable-password-auth \
+  --enable-root-login \
+  --set-root-password 'ChangeMe123!' \
+  --enable-qemu-agent
+```
+
+The script writes the image to `/var/lib/vz/template/qemu` by default and then prints the suggested `qm create` / `qm importdisk` commands for Proxmox.
+
 ## 当前已知限制
 
 - 这版 NAT 逻辑按 `/24` 设计
