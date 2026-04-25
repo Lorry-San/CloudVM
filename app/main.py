@@ -987,37 +987,46 @@ async def delete_vm(
     client: PveApi = Depends(pve),
     settings: Settings = Depends(get_settings),
 ) -> VmActionResponse:
+    nat_lease = get_nat_lease(settings, vmid)
+    released = None
     try:
-        nat_lease = get_nat_lease(settings, vmid)
-        try:
-            status = await client.vm_status(settings.pve_node, vmid)
-            if str(status.get("status")) == "running":
-                stop_task = await client.vm_action(settings.pve_node, vmid, "stop")
-                record_task_log(settings, vmid, "stop_before_delete", task_id=stop_task)
-                await client.wait_for_task(settings.pve_node, stop_task)
-        except PveApiError:
-            pass
-        task = await client.delete_vm(settings.pve_node, vmid)
-        released = release_ip_by_vmid(settings, vmid)
-        if nat_lease:
-            try:
-                await remove_nat_rules(settings, nat_lease)
-            except Exception:
-                pass
-            release_nat_lease(settings, vmid)
-        delete_network_snippet(settings, vmid)
-        delete_vm_credentials(settings, vmid)
-        record_task_log(settings, vmid, "delete", task_id=task)
-        return VmActionResponse(
-            vmid=vmid,
-            task=task,
-            released_ip=released.address if released else None,
-            nat_ip=nat_lease.address if nat_lease else None,
-            ssh_port=nat_lease.ssh_port if nat_lease else None,
-            status="deleting",
-        )
+        status = await client.vm_status(settings.pve_node, vmid)
+        if str(status.get("status")).lower() == "running":
+            stop_task = await client.vm_action(settings.pve_node, vmid, "stop")
+            record_task_log(settings, vmid, "stop_before_delete", task_id=stop_task)
+            await client.wait_for_task(settings.pve_node, stop_task)
     except PveApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        message = str(exc).lower()
+        if "does not exist" not in message and "not found" not in message and "no such vm" not in message:
+            raise HTTPException(status_code=502, detail=f"Unable to stop VM before delete: {exc}") from exc
+
+    try:
+        task = await client.delete_vm(settings.pve_node, vmid)
+    except PveApiError as exc:
+        message = str(exc).lower()
+        if "does not exist" in message or "not found" in message or "no such vm" in message:
+            task = None
+        else:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    released = release_ip_by_vmid(settings, vmid)
+    if nat_lease:
+        try:
+            await remove_nat_rules(settings, nat_lease)
+        except Exception:
+            pass
+        release_nat_lease(settings, vmid)
+    delete_network_snippet(settings, vmid)
+    delete_vm_credentials(settings, vmid)
+    record_task_log(settings, vmid, "delete", task_id=task)
+    return VmActionResponse(
+        vmid=vmid,
+        task=task,
+        released_ip=released.address if released else None,
+        nat_ip=nat_lease.address if nat_lease else None,
+        ssh_port=nat_lease.ssh_port if nat_lease else None,
+        status="deleting" if task else "deleted",
+    )
 
 
 @app.post(
