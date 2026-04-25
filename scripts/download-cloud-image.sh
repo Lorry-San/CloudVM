@@ -82,12 +82,12 @@ done
 
 case "${IMAGE_NAME}" in
   debian-12)
-    IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
-    DEFAULT_FILE="debian-12-genericcloud-amd64.qcow2"
+    IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+    DEFAULT_FILE="debian-12-generic-amd64.qcow2"
     ;;
   debian-13)
-    IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
-    DEFAULT_FILE="debian-13-genericcloud-amd64.qcow2"
+    IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
+    DEFAULT_FILE="debian-13-generic-amd64.qcow2"
     ;;
   ubuntu-22.04)
     IMAGE_URL="https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"

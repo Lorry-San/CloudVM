@@ -8,6 +8,15 @@ DEFAULT_MEMORY="${DEFAULT_MEMORY:-2048}"
 DEFAULT_CORES="${DEFAULT_CORES:-2}"
 DEFAULT_SCSIHW="${DEFAULT_SCSIHW:-virtio-scsi-single}"
 DEFAULT_DISK_SLOT="${DEFAULT_DISK_SLOT:-virtio0}"
+DEFAULT_OSTYPE="${DEFAULT_OSTYPE:-l26}"
+DEFAULT_CPU="${DEFAULT_CPU:-host}"
+DEFAULT_MACHINE="${DEFAULT_MACHINE:-q35}"
+DEFAULT_SOCKETS="${DEFAULT_SOCKETS:-1}"
+DEFAULT_NUMA="${DEFAULT_NUMA:-0}"
+DEFAULT_NET_FIREWALL="${DEFAULT_NET_FIREWALL:-1}"
+DEFAULT_AGENT="${DEFAULT_AGENT:-1}"
+DEFAULT_IOTHREAD="${DEFAULT_IOTHREAD:-1}"
+DEFAULT_CIUSER="${DEFAULT_CIUSER:-root}"
 
 info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -34,13 +43,13 @@ download() {
 load_image_meta() {
   case "$1" in
     debian-12)
-      IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
-      IMAGE_FILE="debian-12-genericcloud-amd64.qcow2"
+      IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+      IMAGE_FILE="debian-12-generic-amd64.qcow2"
       TEMPLATE_NAME="debian-12-cloud"
       ;;
     debian-13)
-      IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
-      IMAGE_FILE="debian-13-genericcloud-amd64.qcow2"
+      IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
+      IMAGE_FILE="debian-13-generic-amd64.qcow2"
       TEMPLATE_NAME="debian-13-cloud"
       ;;
     ubuntu-22.04)
@@ -122,32 +131,107 @@ customize_image() {
   fi
 }
 
-create_template() {
-  local vmid="$1" name="$2" storage="$3" bridge="$4" memory="$5" cores="$6" image_path="$7" disk_slot="$8" scsihw="$9"
+storage_path_for_dir() {
+  local storage="$1"
+  local path
+  path="$(awk -v target="$storage" '
+    $1=="dir:" {current=$2}
+    current==target && $1=="path" {print $2; exit}
+  ' /etc/pve/storage.cfg)"
+  [[ -n "$path" ]] || die "Storage ${storage} is not a dir storage or was not found in /etc/pve/storage.cfg"
+  printf '%s\n' "$path"
+}
 
-  qm status "$vmid" >/dev/null 2>&1 && die "VMID ${vmid} already exists"
-  info "Creating VM ${vmid}"
-  qm create "$vmid" --name "$name" --memory "$memory" --cores "$cores" --net0 "virtio,bridge=${bridge}"
-  qm importdisk "$vmid" "$image_path" "$storage"
-  qm set "$vmid" --scsihw "$scsihw"
+image_format() {
+  local image_path="$1"
+  qemu-img info --output json "$image_path" | python3 -c "import json,sys; print(json.load(sys.stdin)['format'])"
+}
 
+image_virtual_size_gb() {
+  local image_path="$1"
+  qemu-img info --output json "$image_path" | python3 -c "import json,sys,math; print(max(1, math.ceil(json.load(sys.stdin)['virtual-size'] / 1024**3)))"
+}
+
+random_mac() {
+  printf 'BC:24:11:%02X:%02X:%02X\n' $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256))
+}
+
+write_vm_config() {
+  local vmid="$1" name="$2" storage="$3" bridge="$4" memory="$5" cores="$6" disk_ref="$7" disk_slot="$8" scsihw="$9" qga="${10}" disk_size_gb="${11}"
+  local config_path mac boot_order
+
+  config_path="/etc/pve/qemu-server/${vmid}.conf"
+  mac="$(random_mac)"
   case "$disk_slot" in
-    virtio0)
-      qm set "$vmid" --virtio0 "${storage}:vm-${vmid}-disk-0"
-      qm set "$vmid" --boot order=virtio0
-      ;;
-    scsi0)
-      qm set "$vmid" --scsi0 "${storage}:vm-${vmid}-disk-0"
-      qm set "$vmid" --boot order=scsi0
-      ;;
+    virtio0) boot_order="virtio0;ide2;net0" ;;
+    scsi0) boot_order="scsi0;ide2;net0" ;;
+    *) die "Unsupported disk slot: ${disk_slot}" ;;
+  esac
+
+  cat >"${config_path}" <<EOF
+name: ${name}
+memory: ${memory}
+cores: ${cores}
+cpu: ${DEFAULT_CPU}
+machine: ${DEFAULT_MACHINE}
+ostype: ${DEFAULT_OSTYPE}
+scsihw: ${scsihw}
+net0: virtio=${mac},bridge=${bridge},firewall=${DEFAULT_NET_FIREWALL}
+numa: ${DEFAULT_NUMA}
+sockets: ${DEFAULT_SOCKETS}
+ciuser: ${DEFAULT_CIUSER}
+${disk_slot}: ${disk_ref},iothread=${DEFAULT_IOTHREAD},size=${disk_size_gb}G
+ide2: none,media=cdrom
+boot: order=${boot_order}
+serial0: socket
+vga: serial0
+EOF
+
+  if [[ "$qga" == "y" || "${DEFAULT_AGENT}" == "1" ]]; then
+    echo "agent: 1" >>"${config_path}"
+  fi
+}
+
+create_template() {
+  local vmid="$1" name="$2" storage="$3" bridge="$4" memory="$5" cores="$6" image_path="$7" disk_slot="$8" scsihw="$9" qga="${10}"
+  local storage_root image_dir fmt ext target_disk target_name disk_ref disk_size_gb
+
+  [[ -f "/etc/pve/qemu-server/${vmid}.conf" ]] && die "VMID ${vmid} already exists"
+  qm status "$vmid" >/dev/null 2>&1 && die "VMID ${vmid} already exists"
+
+  storage_root="$(storage_path_for_dir "$storage")"
+  image_dir="${storage_root%/}/images/${vmid}"
+  fmt="$(image_format "$image_path")"
+  disk_size_gb="$(image_virtual_size_gb "$image_path")"
+
+  case "$fmt" in
+    qcow2) ext="qcow2" ;;
+    raw) ext="raw" ;;
     *)
-      die "Unsupported disk slot: ${disk_slot}"
+      warn "Unsupported source image format ${fmt}, converting to qcow2"
+      ext="qcow2"
       ;;
   esac
 
-  qm set "$vmid" --ide2 "${storage}:cloudinit"
-  qm set "$vmid" --serial0 socket --vga serial0
-  qm template "$vmid"
+  mkdir -p "$image_dir"
+  target_name="base-${vmid}-disk-0.${ext}"
+  target_disk="${image_dir%/}/${target_name}"
+
+  if [[ "$fmt" == "$ext" ]]; then
+    info "Copying image to ${target_disk}"
+    cp -f "$image_path" "$target_disk"
+  else
+    info "Converting image to ${target_disk}"
+    qemu-img convert -p -O "$ext" "$image_path" "$target_disk"
+  fi
+
+  disk_ref="${storage}:${vmid}/${target_name}"
+  info "Writing VM config /etc/pve/qemu-server/${vmid}.conf"
+  write_vm_config "$vmid" "$name" "$storage" "$bridge" "$memory" "$cores" "$disk_ref" "$disk_slot" "$scsihw" "$qga" "$disk_size_gb"
+  info "Creating cloud-init disk via PVE"
+  qm set "$vmid" --ide2 "${storage}:cloudinit" >/dev/null
+  info "Converting VM ${vmid} to template"
+  qm template "$vmid" >/dev/null
 }
 
 main() {
@@ -195,7 +279,7 @@ main() {
   info "Downloading ${IMAGE_URL}"
   download "${IMAGE_URL}" "${image_path}"
   customize_image "${image_path}" "${root_password}" "${password_auth}" "${root_login}" "${qga}"
-  create_template "${vmid}" "${TEMPLATE_NAME}" "${storage}" "${bridge}" "${memory}" "${cores}" "${image_path}" "${disk_slot}" "${DEFAULT_SCSIHW}"
+  create_template "${vmid}" "${TEMPLATE_NAME}" "${storage}" "${bridge}" "${memory}" "${cores}" "${image_path}" "${disk_slot}" "${DEFAULT_SCSIHW}" "${qga}"
 
   cat <<EOF
 

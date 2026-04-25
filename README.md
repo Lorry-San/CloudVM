@@ -348,10 +348,17 @@ It will:
 - let you choose an official cloud image
 - optionally modify SSH/cloud-init settings
 - download the image
-- create a VM in Proxmox
-- import the disk
+- copy/convert the disk into a directory storage
+- write `/etc/pve/qemu-server/<vmid>.conf` directly
 - attach cloud-init
-- convert the VM into a template
+- mark it as a template without using `qm importdisk`
+
+Notes:
+
+- this script is intended for PVE dir storage such as `local`
+- it does not support block storages such as `local-lvm`
+- Debian images use the official `generic-amd64.qcow2` build
+- the generated VM profile defaults to `q35 + cpu=host + agent=1 + firewall=1`
 
 ## 当前已知限制
 
