@@ -268,6 +268,269 @@ async def vm_detail_page(vmid: int) -> HTMLResponse:
     return HTMLResponse(page)
 
 
+def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings) -> HTMLResponse:
+    credentials = get_vm_credentials(settings, vmid)
+    paste_username = credentials.get("username")
+    paste_password = credentials.get("password")
+    has_both_credentials = bool(paste_username) and bool(paste_password)
+    ws_url_path = f"/ws/vnc?token={token}"
+    ws_scheme = "wss" if settings.public_base_url.startswith("https://") else "ws"
+    if settings.public_base_url:
+        base = settings.public_base_url.rstrip("/")
+        ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
+        ws_url = f"{ws_base}{ws_url_path}"
+    else:
+        ws_url = f"{ws_scheme}://{html.escape('{host}')}{ws_url_path}"
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VM {vmid} VNC</title>
+  <style>
+    html, body {{
+      height: 100%;
+      margin: 0;
+      background: #111827;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    #bar {{
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 8px 12px;
+      background: #0f172a;
+      border-bottom: 1px solid #334155;
+      box-sizing: border-box;
+    }}
+    #toolbar {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 32px;
+    }}
+    #paste-row {{
+      display: none;
+      align-items: stretch;
+      gap: 8px;
+      width: 100%;
+    }}
+    body.clipboard-open #paste-row {{
+      display: flex;
+    }}
+    #screen {{
+      height: calc(100% - 50px);
+      width: 100%;
+      overflow: hidden;
+      background: #000;
+    }}
+    body.clipboard-open #screen {{
+      height: calc(100% - 104px);
+    }}
+    button {{
+      background: #2563eb;
+      color: white;
+      border: 0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }}
+    #status {{
+      color: #cbd5e1;
+      font-size: 13px;
+    }}
+    #paste-box {{
+      flex: 1;
+      min-height: 44px;
+      max-height: 72px;
+      resize: vertical;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      font: 13px/1.4 Consolas, "SFMono-Regular", Monaco, Menlo, monospace;
+    }}
+    button:disabled {{
+      opacity: .5;
+      cursor: not-allowed;
+    }}
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <div id="toolbar">
+      <strong>VM {vmid}</strong>
+      <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
+      <button id="type-username" {"disabled" if not has_both_credentials else ""}>Username</button>
+      <button id="type-password" {"disabled" if not has_both_credentials else ""}>Password</button>
+      <button id="type-login" {"disabled" if not has_both_credentials else ""}>Username+Password</button>
+      <button id="send-enter">Enter</button>
+      <button id="toggle-clipboard">Show Clipboard</button>
+      <span id="status">connecting</span>
+    </div>
+    <div id="paste-row">
+      <textarea id="paste-box" placeholder="Multi-line commands or text. New lines will send Enter."></textarea>
+      <button id="load-clipboard">Read Clipboard</button>
+      <button id="send-paste">Send Text</button>
+      <button id="send-paste-enter">Send+Enter</button>
+    </div>
+  </div>
+  <div id="screen"></div>
+  <script type="module">
+    import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.2.0/core/rfb.js';
+
+    const host = window.location.host;
+    const wsUrl = {ws_url!r}.replace('{{host}}', host);
+    const pasteUsername = {json.dumps(paste_username)};
+    const pastePassword = {json.dumps(paste_password)};
+    const body = document.body;
+    const status = document.getElementById('status');
+    const pasteBox = document.getElementById('paste-box');
+    const toggleClipboardButton = document.getElementById('toggle-clipboard');
+    const rfb = new RFB(document.getElementById('screen'), wsUrl);
+    rfb.scaleViewport = true;
+    rfb.resizeSession = true;
+    rfb.viewOnly = false;
+
+    rfb.addEventListener('connect', () => status.textContent = 'connected');
+    rfb.addEventListener('disconnect', (event) => {{
+      status.textContent = event.detail.clean ? 'disconnected' : 'connection failed';
+    }});
+    rfb.addEventListener('credentialsrequired', () => {{
+      status.textContent = 'credentials required';
+    }});
+    document.getElementById('send-ctrl-alt-del').addEventListener('click', () => {{
+      rfb.sendCtrlAltDel();
+    }});
+    function sleep(ms) {{
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }}
+    const SHIFT_KEYSYM = 0xffe1;
+    const shiftedChars = {{
+      '!': '1',
+      '@': '2',
+      '#': '3',
+      '$': '4',
+      '%': '5',
+      '^': '6',
+      '&': '7',
+      '*': '8',
+      '(': '9',
+      ')': '0',
+      '_': '-',
+      '+': '=',
+      '{{': '[',
+      '}}': ']',
+      '|': '\\\\',
+      ':': ';',
+      '"': "'",
+      '<': ',',
+      '>': '.',
+      '?': '/',
+      '~': '`',
+    }};
+    function keysymFor(char) {{
+      const codePoint = char.codePointAt(0);
+      if (codePoint === 10 || codePoint === 13) return 0xff0d;
+      if (codePoint === 9) return 0xff09;
+      if (codePoint >= 0x20 && codePoint <= 0x7e) return codePoint;
+      return codePoint;
+    }}
+    function keyDown(keysym) {{
+      rfb.sendKey(keysym, null, true);
+    }}
+    function keyUp(keysym) {{
+      rfb.sendKey(keysym, null, false);
+    }}
+    function sendKeysym(keysym) {{
+      keyDown(keysym);
+      keyUp(keysym);
+    }}
+    async function sendChar(char) {{
+      if (char === '\\n' || char === '\\r') {{
+        sendKeysym(0xff0d);
+        return;
+      }}
+      if (char === '\\t') {{
+        sendKeysym(0xff09);
+        return;
+      }}
+      if (/[A-Z]/.test(char)) {{
+        keyDown(SHIFT_KEYSYM);
+        sendKeysym(keysymFor(char.toLowerCase()));
+        keyUp(SHIFT_KEYSYM);
+        return;
+      }}
+      if (Object.prototype.hasOwnProperty.call(shiftedChars, char)) {{
+        keyDown(SHIFT_KEYSYM);
+        sendKeysym(keysymFor(shiftedChars[char]));
+        keyUp(SHIFT_KEYSYM);
+        return;
+      }}
+      sendKeysym(keysymFor(char));
+    }}
+    async function typeText(text, pressEnter = false) {{
+      if (!text) return;
+      status.textContent = 'typing';
+      rfb.focus();
+      const normalized = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+      for (const char of normalized) {{
+        await sendChar(char);
+        await sleep(Object.prototype.hasOwnProperty.call(shiftedChars, char) || /[A-Z]/.test(char) ? 30 : 18);
+      }}
+      if (pressEnter) {{
+        sendKeysym(0xff0d);
+      }}
+      status.textContent = 'connected';
+    }}
+    document.getElementById('type-username').addEventListener('click', () => {{
+      typeText(pasteUsername, true);
+    }});
+    document.getElementById('type-password').addEventListener('click', () => {{
+      typeText(pastePassword, true);
+    }});
+    document.getElementById('type-login').addEventListener('click', async () => {{
+      await typeText(pasteUsername, true);
+      await sleep(450);
+      await typeText(pastePassword, true);
+    }});
+    document.getElementById('send-enter').addEventListener('click', () => {{
+      sendKeysym(0xff0d);
+    }});
+    toggleClipboardButton.addEventListener('click', () => {{
+      const opened = body.classList.toggle('clipboard-open');
+      toggleClipboardButton.textContent = opened ? 'Hide Clipboard' : 'Show Clipboard';
+      if (opened) {{
+        pasteBox.focus();
+      }}
+    }});
+    document.getElementById('load-clipboard').addEventListener('click', async () => {{
+      try {{
+        const text = await navigator.clipboard.readText();
+        pasteBox.value = text;
+        status.textContent = text ? 'clipboard loaded' : 'clipboard empty';
+      }} catch (error) {{
+        status.textContent = 'clipboard denied';
+      }}
+    }});
+    document.getElementById('send-paste').addEventListener('click', async () => {{
+      await typeText(pasteBox.value, false);
+    }});
+    document.getElementById('send-paste-enter').addEventListener('click', async () => {{
+      await typeText(pasteBox.value, true);
+    }});
+  </script>
+</body>
+</html>
+"""
+    return HTMLResponse(page)
+
+
 def resolve_template_vmid(req: VmCreateRequest, settings: Settings) -> int | None:
     if req.template_vmid is not None:
         return req.template_vmid
@@ -1381,7 +1644,7 @@ async def bound_vnc_console_page(
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
     vmid = vmid_from_console_token(token, settings)
-    return render_vnc_console_page(vmid, token, settings)
+    return render_vnc_console_page_v2(vmid, token, settings)
 
 
 @app.get("/console/vnc/{vmid}", response_class=HTMLResponse)
@@ -1391,7 +1654,7 @@ async def vnc_console_page(
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
     require_console_token(token, settings, vmid)
-    return render_vnc_console_page(vmid, token, settings)
+    return render_vnc_console_page_v2(vmid, token, settings)
 
 
 @app.post(
