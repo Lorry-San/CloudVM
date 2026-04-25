@@ -411,28 +411,39 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
       return new Promise((resolve) => setTimeout(resolve, ms));
     }}
     const SHIFT_KEYSYM = 0xffe1;
-    const shiftedChars = {{
-      '!': '1',
-      '@': '2',
-      '#': '3',
-      '$': '4',
-      '%': '5',
-      '^': '6',
-      '&': '7',
-      '*': '8',
-      '(': '9',
-      ')': '0',
-      '_': '-',
-      '+': '=',
-      '{{': '[',
-      '}}': ']',
-      '|': '\\\\',
-      ':': ';',
-      '"': "'",
-      '<': ',',
-      '>': '.',
-      '?': '/',
-      '~': '`',
+    const explicitKeyMap = {{
+      '!': {{ base: '1', shift: true }},
+      '@': {{ base: '2', shift: true }},
+      '#': {{ base: '3', shift: true }},
+      '$': {{ base: '4', shift: true }},
+      '%': {{ base: '5', shift: true }},
+      '^': {{ base: '6', shift: true }},
+      '&': {{ base: '7', shift: true }},
+      '*': {{ base: '8', shift: true }},
+      '(': {{ base: '9', shift: true }},
+      ')': {{ base: '0', shift: true }},
+      '-': {{ base: '-', shift: false }},
+      '_': {{ base: '-', shift: true }},
+      '=': {{ base: '=', shift: false }},
+      '+': {{ base: '=', shift: true }},
+      '[': {{ base: '[', shift: false }},
+      '{{': {{ base: '[', shift: true }},
+      ']': {{ base: ']', shift: false }},
+      '}}': {{ base: ']', shift: true }},
+      '\\\\': {{ base: '\\\\', shift: false }},
+      '|': {{ base: '\\\\', shift: true }},
+      ';': {{ base: ';', shift: false }},
+      ':': {{ base: ';', shift: true }},
+      "'": {{ base: "'", shift: false }},
+      '"': {{ base: "'", shift: true }},
+      ',': {{ base: ',', shift: false }},
+      '<': {{ base: ',', shift: true }},
+      '.': {{ base: '.', shift: false }},
+      '>': {{ base: '.', shift: true }},
+      '/': {{ base: '/', shift: false }},
+      '?': {{ base: '/', shift: true }},
+      '`': {{ base: '`', shift: false }},
+      '~': {{ base: '`', shift: true }},
     }};
     function keysymFor(char) {{
       const codePoint = char.codePointAt(0);
@@ -460,15 +471,20 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
         sendKeysym(0xff09);
         return;
       }}
+      if (Object.prototype.hasOwnProperty.call(explicitKeyMap, char)) {{
+        const mapping = explicitKeyMap[char];
+        if (mapping.shift) {{
+          keyDown(SHIFT_KEYSYM);
+        }}
+        sendKeysym(keysymFor(mapping.base));
+        if (mapping.shift) {{
+          keyUp(SHIFT_KEYSYM);
+        }}
+        return;
+      }}
       if (/[A-Z]/.test(char)) {{
         keyDown(SHIFT_KEYSYM);
         sendKeysym(keysymFor(char.toLowerCase()));
-        keyUp(SHIFT_KEYSYM);
-        return;
-      }}
-      if (Object.prototype.hasOwnProperty.call(shiftedChars, char)) {{
-        keyDown(SHIFT_KEYSYM);
-        sendKeysym(keysymFor(shiftedChars[char]));
         keyUp(SHIFT_KEYSYM);
         return;
       }}
@@ -481,7 +497,7 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
       const normalized = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
       for (const char of normalized) {{
         await sendChar(char);
-        await sleep(Object.prototype.hasOwnProperty.call(shiftedChars, char) || /[A-Z]/.test(char) ? 30 : 18);
+        await sleep((Object.prototype.hasOwnProperty.call(explicitKeyMap, char) && explicitKeyMap[char].shift) || /[A-Z]/.test(char) ? 30 : 18);
       }}
       if (pressEnter) {{
         sendKeysym(0xff0d);
