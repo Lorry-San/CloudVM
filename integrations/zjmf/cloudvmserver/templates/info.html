@@ -1,0 +1,138 @@
+<div class="container-fluid">
+    {if $error_msg}
+    <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle"></i> {$error_msg}
+    </div>
+    {/if}
+
+    <div class="card shadow mb-3">
+        <div class="card-header py-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-server mr-2"></i>实例信息
+            </h6>
+        </div>
+        <div class="card-body py-3">
+            <div class="row">
+                <div class="col-md-6 mb-2"><span class="text-muted">实例名称：</span>{$name}</div>
+                <div class="col-md-6 mb-2"><span class="text-muted">VMID：</span>{$vmid}</div>
+                <div class="col-md-6 mb-2"><span class="text-muted">状态：</span>{$status.status|default='unknown'}</div>
+                <div class="col-md-6 mb-2"><span class="text-muted">IP：</span>{$dedicatedip}</div>
+                <div class="col-md-6 mb-2"><span class="text-muted">用户名：</span>{$username}</div>
+                <div class="col-md-6 mb-2"><span class="text-muted">密码：</span>{$password}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-3">
+        <div class="card-header py-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-network-wired mr-2"></i>网络与流量
+            </h6>
+        </div>
+        <div class="card-body py-3">
+            <pre class="mb-3 small bg-light p-3" style="white-space: pre-wrap;">{$assignedips}</pre>
+            <div class="row">
+                <div class="col-md-4 mb-2"><span class="text-muted">流量额度：</span>{$traffic.quota_gb|default='-'}</div>
+                <div class="col-md-4 mb-2"><span class="text-muted">已用流量：</span>{$traffic.used_gb|default='-'}</div>
+                <div class="col-md-4 mb-2"><span class="text-muted">剩余流量：</span>{$traffic.remaining_gb|default='-'}</div>
+            </div>
+        </div>
+    </div>
+
+    {if $ips}
+    <div class="card shadow mb-3">
+        <div class="card-header py-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-globe mr-2"></i>IP 绑定
+            </h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>地址</th>
+                            <th>CIDR</th>
+                            <th>网关</th>
+                            <th>状态</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {foreach $ips as $ip}
+                        <tr>
+                            <td>{$ip.address|default='-'}</td>
+                            <td>{$ip.cidr|default='-'}</td>
+                            <td>{$ip.gateway|default='-'}</td>
+                            <td>{$ip.status|default='-'}</td>
+                            <td>{$ip.note|default='-'}</td>
+                        </tr>
+                        {/foreach}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {/if}
+
+    {if $tasks}
+    <div class="card shadow mb-3">
+        <div class="card-header py-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-list mr-2"></i>最近任务
+            </h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>动作</th>
+                            <th>状态</th>
+                            <th>时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {foreach $tasks as $task}
+                        <tr>
+                            <td>{$task.action|default='-'}</td>
+                            <td>{$task.status|default='-'}</td>
+                            <td>{$task.created_at|default='-'}</td>
+                        </tr>
+                        {/foreach}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {/if}
+
+    {if $console_url}
+    <div class="card shadow">
+        <div class="card-header py-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-desktop mr-2"></i>控制台
+            </h6>
+        </div>
+        <div class="card-body py-3">
+            <a href="{$console_url}" target="_blank" class="btn btn-primary px-4">
+                <i class="fas fa-external-link-alt mr-2"></i>打开 VNC 控制台
+            </a>
+        </div>
+    </div>
+    {/if}
+</div>
+
+<style>
+.card {
+    border: none;
+}
+.card-header {
+    background-color: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+}
+.btn-primary {
+    background-color: #2563eb;
+    border-color: #2563eb;
+}
+</style>

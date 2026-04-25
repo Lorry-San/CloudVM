@@ -1025,6 +1025,24 @@ async def set_expiration(vmid: int, req: VmExpirationRequest) -> dict[str, objec
     return {"vmid": vmid, "expires_at": req.expires_at, "action": req.action}
 
 
+@app.get(
+    "/api/v1/vms/{vmid}/credentials",
+    dependencies=[Depends(require_api_token)],
+)
+async def get_saved_vm_credentials(
+    vmid: int,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    credentials = get_vm_credentials(settings, vmid)
+    return {
+        "vmid": vmid,
+        "username": credentials.get("username"),
+        "password": credentials.get("password"),
+        "username_saved": bool(credentials.get("username")),
+        "password_saved": bool(credentials.get("password")),
+    }
+
+
 @app.put(
     "/api/v1/vms/{vmid}/credentials",
     response_model=VmCredentialsResponse,

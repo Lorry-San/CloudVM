@@ -1,122 +1,81 @@
-# Platform API plan
+# CloudVM API Docs
 
-This project is now a Proxmox VE VM management platform with a FastAPI backend
-and web console frontend.
+这份文档按当前代码整理，基于：
 
-## Security model
+- `app/main.py`
+- `app/schemas.py`
+- `app/config.py`
 
-Users must never receive the Proxmox VE backend URL, PVE login page, API token,
-VNC ticket, or terminal ticket.
+默认情况下：
 
-The browser talks only to CloudVM:
-
-- REST API: `https://panel.example.com/api/v1/...`
-- VNC WebSocket: `wss://panel.example.com/ws/vnc/{vmid}`
-- xterm.js WebSocket: `wss://panel.example.com/ws/xterm/{vmid}`
-
-CloudVM talks to Proxmox VE privately:
-
-- `POST /nodes/{node}/qemu/{vmid}/vncproxy`
-- `GET /nodes/{node}/qemu/{vmid}/vncwebsocket`
-- `POST /nodes/{node}/qemu/{vmid}/termproxy`
-
-The platform should be placed behind HTTPS reverse proxy, such as Nginx or Caddy.
-Only the platform domain should be exposed publicly. Proxmox VE port `8006`
-should stay private or firewall-restricted.
-
-## Current API skeleton
-
-All REST endpoints require:
+- FastAPI `docs/redoc/openapi` 关闭
+- 所有业务接口都需要请求头：
 
 ```http
 X-API-Token: <PLATFORM_API_TOKEN>
 ```
 
-VM lifecycle endpoints:
+## Base URLs
 
-- `POST /api/v1/ip-pool`
-- `GET /api/v1/ip-pool`
-- `POST /api/v1/ip-pool/{address}/release`
-- `GET /api/v1/images`
-- `GET /api/v1/status`
-- `GET /api/v1/vms`
-- `POST /api/v1/vms`
-- `GET /api/v1/vms/{vmid}`
-- `POST /api/v1/vms/{vmid}/pause`
-- `POST /api/v1/vms/{vmid}/resume`
-- `DELETE /api/v1/vms/{vmid}`
-- `POST /api/v1/vms/{vmid}/expiration`
-- `PUT /api/v1/vms/{vmid}/credentials`
+- 面板首页：`GET /`
+- 面板别名：`GET /dashboard`
+- 单台 VM 页面：`GET /vm/{vmid}`
+- 健康检查：`GET /health`
+- Token 校验：`GET /api/v1/auth/check`
 
-Console endpoints:
+## Security Model
 
-- `POST /api/v1/consoles/token`
-- `POST /api/v1/consoles/vnc/{vmid}`
-- `POST /api/v1/consoles/xterm/{vmid}`
-- `GET /console?token=<CONSOLE_TOKEN>`
-- `GET /console/vnc/{vmid}?token=<PLATFORM_API_TOKEN>`
-- `WS /ws/vnc`
-- `WS /ws/vnc/{vmid}`
-- `WS /ws/xterm/{vmid}`
+浏览器只应该访问 CloudVM，不应该直接拿到：
 
-The browser VNC page uses noVNC and connects back through the platform
-WebSocket proxy. The PVE backend URL and VNC ticket stay server-side.
+- PVE 后台地址
+- PVE API token
+- PVE VNC ticket
+- PVE xterm ticket
 
-The built-in dashboard is served by the same FastAPI process:
+控制台相关流程：
 
-- `GET /`
-- `GET /dashboard`
-- `GET /vm/{vmid}`
+- 先调用平台接口拿短期 console token
+- 浏览器访问 `/console?token=...`
+- 页面再连平台自己的 WebSocket
+- 平台在服务端代理到 PVE
 
-Open it in a browser and enter `PLATFORM_API_TOKEN`. The dashboard stores the
-platform token only in browser session storage and calls the same API endpoints.
-Public FastAPI docs and OpenAPI schema are disabled by default.
+## Image Templates
 
-Use `POST /api/v1/consoles/token` with the platform API token to mint a short
-lived VNC console token. The token is bound to one VM, and the browser only
-needs the returned `/console?token=...` URL:
+镜像名来自 `.env`：
 
-```json
-{
-  "vmid": 101,
-  "ttl_seconds": 600
-}
+```env
+PVE_IMAGE_TEMPLATES={"debian-12":9000,"ubuntu-24.04":9001}
 ```
 
-Example response:
+对外暴露的是 `image`，不是原始模板 VMID。
 
-```json
-{
-  "token": "short-lived-token",
-  "vmid": 101,
-  "expires_at": "2026-04-22T10:00:00Z",
-  "console_url": "https://panel.example.com/console?token=short-lived-token"
-}
+### List images
+
+```http
+GET /api/v1/images
+GET /api/v1/reinstall/images
 ```
 
-The `/console` page resolves the VMID from the token server-side, then connects
-to `WS /ws/vnc?token=...`. Tokens are currently in-memory; restarting the
-platform invalidates existing console links.
+响应示例：
 
-When a VM is created with `ci_user` or `ci_password`, the platform stores those
-credentials in SQLite so the VNC page can offer paste buttons for username and
-password. Existing VMs can be updated with `PUT /api/v1/vms/{vmid}/credentials`.
+```json
+[
+  {
+    "image": "debian-12",
+    "template_vmid": 9000
+  }
+]
+```
 
-## Next implementation steps
+## IP Pool
 
-1. Add database tables for users, VMs, expiration policy, traffic quota, and audit log.
-2. Persist VM creation metadata after PVE clone/create task is accepted.
-3. Add a scheduler that pauses or deletes expired VMs.
-4. Add noVNC and xterm.js frontend pages that connect only to platform WebSockets.
-5. Add per-user authorization so users can open only their own VMs.
-6. Add task polling for Proxmox UPID completion and failure reporting.
+### Add public IPs
 
-## IP pool
+```http
+POST /api/v1/ip-pool
+```
 
-Import allocatable IP addresses before creating VMs. The platform stores them in
-SQLite and marks an address as allocated when a VM is created.
-
-Example: import explicit addresses:
+显式导入：
 
 ```json
 {
@@ -129,7 +88,7 @@ Example: import explicit addresses:
 }
 ```
 
-Example: import a CIDR range:
+按 CIDR 导入：
 
 ```json
 {
@@ -141,70 +100,48 @@ Example: import a CIDR range:
 }
 ```
 
-When creating a VM, `allocate_ip` defaults to `true`. If `ip_config` is omitted,
-the backend takes the first available IP and writes this cloud-init value:
+### List IP pool
 
-```text
-ip=<address>/<cidr>,gw=<gateway>
+```http
+GET /api/v1/ip-pool
+GET /api/v1/ip-pool?status=available
 ```
 
-Set `allocate_ip` to `false` or pass `ip_config` manually to bypass the pool.
+### Release one public IP
 
-The platform currently uses PVE native cloud-init `ipconfig0` for IP assignment.
-This keeps the IP visible and editable in the PVE Cloud-Init panel. For `/32`
-public IPs with off-subnet gateways, the guest image must be able to handle
-`ip=<address>/32,gw=<gateway>` or include a template-side network hook.
-
-Release an IP:
-
-```text
-POST /api/v1/ip-pool/203.0.113.10/release
+```http
+POST /api/v1/ip-pool/{address}/release
 ```
 
-## Status and traffic
+### List IPs bound to one VM
 
-Use `/api/v1/status` without a VMID to inspect the Proxmox node:
-
-```text
-GET /api/v1/status
+```http
+GET /api/v1/vms/{vmid}/ips
 ```
 
-The response includes host CPU, memory, root disk, disk IO counters from
-`/proc/diskstats`, and network counters from `/proc/net/dev`.
+如果该 VM 是 NAT 模式，这里还会附带 NAT lease 信息，`note` 里会写出 SSH 端口和端口段。
 
-Use the same endpoint with `vmid` to inspect one VM:
+## VM Create
 
-```text
-GET /api/v1/status?vmid=101
+```http
+POST /api/v1/vms
 ```
 
-The VM response includes PVE status fields plus traffic collected from matching
-host tap interfaces such as `tap101i0`. This brings the old traffic collection
-method into the platform API while keeping the raw PVE counters available.
-
-## Image templates and cloud-init boot flow
-
-Define public image names in `.env` and map them to PVE template VMIDs:
-
-```env
-PVE_IMAGE_TEMPLATES={"debian-12":9000,"ubuntu-24.04":9001,"windows-2022":9002}
-```
-
-The frontend should send `image`, not the raw template VMID. This keeps the user
-away from Proxmox internals and lets the platform control which templates are
-available.
-
-Example create request:
+`VmCreateRequest` 主要字段：
 
 ```json
 {
+  "vmid": 101,
   "name": "vm-demo-001",
   "image": "debian-12",
+  "template_vmid": null,
   "cores": 2,
   "memory_mb": 2048,
   "disk_gb": 40,
-  "storage": "local-lvm",
+  "storage": "local",
+  "bridge": "vmbr0",
   "network": {
+    "mode": "public",
     "bridge": "vmbr0",
     "model": "virtio",
     "rate": 100,
@@ -212,29 +149,470 @@ Example create request:
     "firewall": true
   },
   "boot_order": "scsi0;ide2;net0",
-  "ci_user": "debian",
-  "ci_password": "change-after-login",
+  "ci_user": "root",
+  "ci_password": "ChangeMe123!",
   "ssh_keys": "ssh-ed25519 AAAA...",
   "ip_config": "ip=dhcp",
-  "nameserver": "1.1.1.1",
+  "nameserver": "8.8.8.8",
+  "searchdomain": null,
+  "allocate_ip": true,
+  "owner": null,
+  "expires_at": null,
+  "traffic_limit_gb": 50,
+  "traffic_reset_day": 1,
+  "traffic_reset_hour": 0,
+  "traffic_reset_timezone": "Asia/Shanghai",
   "start": true
 }
 ```
 
-The backend flow is:
+说明：
 
-1. Resolve `image` to a PVE template VMID.
-2. Clone the template.
-3. Wait for the clone UPID to finish.
-4. Apply CPU, memory, network model, bridge, VLAN, and rate config.
-5. Resize `scsi0` when `disk_gb` is provided.
-6. Apply cloud-init and boot order config.
-7. Start the VM.
+- `image` 和 `template_vmid` 二选一即可
+- `network.mode`:
+  - `public`：走公网桥接，默认 `vmbr0`
+  - `nat`：走 NAT，自动挂 `nat0`
+- `allocate_ip=true` 且未提供 `ip_config` 时：
+  - 公网模式会从 IP 池自动分配
+  - NAT 模式会自动分配 NAT 地址和端口
+- 若未传 `ci_user`，平台保存凭据时默认用户名为 `root`
 
-Deleting a VM through `DELETE /api/v1/vms/{vmid}` stops the VM, deletes it from
-PVE, releases the IP pool lease attached to that VMID, and removes the generated
-network snippet.
+创建成功响应：
 
-For Linux cloud images, make sure the PVE template already has a cloud-init drive
-configured. Windows images usually require a different initialization path; do not
-assume Linux cloud-init fields will work for every Windows template.
+```json
+{
+  "vmid": 101,
+  "task": "UPID:pve01:...",
+  "start_task": "UPID:pve01:...",
+  "allocated_ip": "203.0.113.10",
+  "nat_ip": null,
+  "ssh_port": null,
+  "port_range_start": null,
+  "port_range_end": null,
+  "network_mode": "public",
+  "released_ip": null,
+  "status": "accepted"
+}
+```
+
+NAT 模式时：
+
+```json
+{
+  "vmid": 101,
+  "nat_ip": "192.168.0.1",
+  "ssh_port": 30001,
+  "port_range_start": 30001,
+  "port_range_end": 30010,
+  "network_mode": "nat",
+  "status": "accepted"
+}
+```
+
+## VM Query
+
+### List VMs
+
+```http
+GET /api/v1/vms
+```
+
+返回 PVE VM 列表，并补充：
+
+- `network_mode`
+- NAT lease
+- 流量配额汇总
+
+### Get one VM
+
+```http
+GET /api/v1/vms/{vmid}
+```
+
+返回单台 VM 的状态信息，并补充：
+
+- NAT 信息
+- 流量计费信息
+- 平台侧记录的凭据是否存在
+
+## VM Config Update
+
+```http
+PUT /api/v1/vms/{vmid}/config
+```
+
+请求体：
+
+```json
+{
+  "cores": 4,
+  "memory_mb": 4096,
+  "network_rate": 200,
+  "reboot": true
+}
+```
+
+说明：
+
+- `cores`：修改 CPU
+- `memory_mb`：修改内存
+- `network_rate`：修改 `net0` 的 PVE 速率限制
+- `reboot=true` 且 VM 当前运行中时，会自动触发一次重启
+
+## VM Reinstall
+
+```http
+POST /api/v1/vms/{vmid}/reinstall
+```
+
+请求体：
+
+```json
+{
+  "image": "debian-12",
+  "template_vmid": null,
+  "slot": "virtio0",
+  "template_slot": null,
+  "storage": "local",
+  "disk_size": "40G",
+  "ci_user": "root",
+  "password": "ChangeMe123!",
+  "nameserver": "8.8.8.8",
+  "start": true,
+  "free_old": true,
+  "dry_run": false
+}
+```
+
+说明：
+
+- `free_old=true`：默认删除旧系统盘
+- `start=true`：重装结束后自动开机
+- `dry_run=true`：只做检查，不实际执行
+- 如果传了 `ci_user` 或 `password`，平台会更新这台 VM 的已保存凭据
+
+响应：
+
+```json
+{
+  "vmid": 101,
+  "task": "reinstall-101-1714020000",
+  "status": "reinstall_queued"
+}
+```
+
+## VM Traffic Config
+
+### Get traffic config
+
+```http
+GET /api/v1/vms/{vmid}/traffic
+```
+
+### Update traffic config
+
+```http
+PUT /api/v1/vms/{vmid}/traffic
+```
+
+请求体：
+
+```json
+{
+  "quota_gb": 50,
+  "reset_day": 1,
+  "reset_hour": 0,
+  "timezone": "Asia/Shanghai",
+  "reset_usage": false
+}
+```
+
+返回字段包括：
+
+- `quota_gb`
+- `used_gb`
+- `remaining_gb`
+- `percent`
+- `next_reset_at`
+- `baseline_at`
+
+如果流量达到配额，平台在状态采样时会自动对该 VM 执行断网。
+
+## Status and Metrics
+
+### Node / VM status
+
+```http
+GET /api/v1/status
+GET /api/v1/status?vmid=101
+GET /status
+GET /status?vmid=101
+```
+
+说明：
+
+- 不带 `vmid`：返回宿主机状态
+- 带 `vmid`：返回虚拟机状态
+
+宿主机状态大致包含：
+
+- CPU
+- 内存
+- 根盘
+- 磁盘 IO
+- 网卡统计
+- NAT 总体配置摘要
+
+虚拟机状态大致包含：
+
+- PVE 原始运行状态
+- 对应 tap 网卡流量
+- NAT lease
+- `traffic_billing`
+
+### Metric history
+
+```http
+GET /api/v1/metrics/history
+GET /api/v1/metrics/history?vmid=101&hours=24
+```
+
+说明：
+
+- 不带 `vmid`：看宿主机最近采样
+- 带 `vmid`：看单台 VM 最近采样
+- `hours` 默认 `24`
+
+### VM task logs
+
+```http
+GET /api/v1/vms/{vmid}/tasks
+GET /api/v1/vms/{vmid}/tasks?limit=50
+```
+
+返回平台侧记录的任务日志，例如：
+
+- create
+- delete
+- reinstall
+- config_update
+- traffic_config
+- network_disconnect
+- network_connect
+
+## VM Actions
+
+### Pause / stop
+
+```http
+POST /api/v1/vms/{vmid}/pause
+```
+
+当前实现实际调用的是 PVE `stop`，不是 hypervisor suspend。
+
+### Resume / start
+
+```http
+POST /api/v1/vms/{vmid}/resume
+```
+
+### Disconnect network
+
+```http
+POST /api/v1/vms/{vmid}/network/disconnect
+```
+
+通过给 `net0` 打 `link_down=1` 实现。
+
+### Connect network
+
+```http
+POST /api/v1/vms/{vmid}/network/connect
+```
+
+通过移除 `link_down=1` 实现。
+
+### Delete VM
+
+```http
+DELETE /api/v1/vms/{vmid}
+```
+
+当前流程：
+
+1. 尝试先 stop
+2. 调 PVE delete
+3. 释放公网 IP lease
+4. 若是 NAT VM，删除 NAT 规则并释放 NAT lease
+5. 删除生成的网络 snippet
+6. 删除平台保存的 VM 凭据
+
+### Expiration
+
+```http
+POST /api/v1/vms/{vmid}/expiration
+```
+
+请求体：
+
+```json
+{
+  "expires_at": "2026-05-01T00:00:00Z",
+  "action": "pause"
+}
+```
+
+当前仅返回设置结果，调度和持久化还没真正接上。
+
+## VM Credentials
+
+### Get saved credentials
+
+```http
+GET /api/v1/vms/{vmid}/credentials
+```
+
+返回平台侧保存的 VM 控制台凭据，供受信任的上游系统如财务系统服务端调用：
+
+```json
+{
+  "vmid": 101,
+  "username": "root",
+  "password": "ChangeMe123!",
+  "username_saved": true,
+  "password_saved": true
+}
+```
+
+### Update saved credentials
+
+```http
+PUT /api/v1/vms/{vmid}/credentials
+```
+
+请求体：
+
+```json
+{
+  "username": "root",
+  "password": "ChangeMe123!"
+}
+```
+
+返回：
+
+```json
+{
+  "vmid": 101,
+  "username_saved": true,
+  "password_saved": true
+}
+```
+
+这些凭据主要用于 VNC 页面上的“粘贴用户名 / 密码”按钮。
+
+## Consoles
+
+### Mint short-lived console token
+
+```http
+POST /api/v1/consoles/token
+```
+
+请求体：
+
+```json
+{
+  "vmid": 101,
+  "ttl_seconds": 600
+}
+```
+
+说明：
+
+- `ttl_seconds` 范围 `60-900`
+- 实际上限 900 秒
+- token 当前保存在内存里，服务重启后会失效
+
+返回：
+
+```json
+{
+  "token": "short-lived-token",
+  "expires_at": "2026-04-25T10:00:00Z",
+  "vmid": 101,
+  "console_url": "https://panel.example.com/console?token=short-lived-token"
+}
+```
+
+### VNC session meta
+
+```http
+POST /api/v1/consoles/vnc/{vmid}
+```
+
+### Xterm session meta
+
+```http
+POST /api/v1/consoles/xterm/{vmid}
+```
+
+这两个接口返回平台自己的 WebSocket 地址，不会返回 PVE 后端地址。
+
+### Console pages
+
+```http
+GET /console?token=<CONSOLE_TOKEN>
+GET /console/vnc/{vmid}?token=<CONSOLE_TOKEN>
+```
+
+注意：
+
+- 这里用的是 **console token**
+- 不是 `PLATFORM_API_TOKEN`
+
+### WebSocket endpoints
+
+```text
+WS /ws/vnc?token=<CONSOLE_TOKEN>
+WS /ws/vnc/{vmid}?token=<CONSOLE_TOKEN>
+WS /ws/xterm/{vmid}?token=<CONSOLE_TOKEN>
+```
+
+说明：
+
+- `/ws/vnc`：从 token 里解出 VMID
+- `/ws/vnc/{vmid}`：额外校验 token 与 VMID 匹配
+- `/ws/xterm/{vmid}`：代理到 PVE 的 `termproxy/vncwebsocket`
+
+## Current Defaults
+
+来自 `app/config.py` 的默认值：
+
+```env
+PVE_DEFAULT_STORAGE=local-lvm
+PVE_DEFAULT_BRIDGE=vmbr0
+PVE_NAT_ENABLED=true
+PVE_NAT_BRIDGE=nat0
+PVE_NAT_NETWORK=192.168.0.0/24
+PVE_NAT_HOST_IP=192.168.0.254
+PVE_NAT_PORT_START=30001
+PVE_NAT_PORTS_PER_VM=10
+PVE_NAT_NAMESERVER=8.8.8.8
+```
+
+NAT 端口规则：
+
+- `192.168.0.1` -> `30001-30010`
+- `192.168.0.2` -> `30011-30020`
+- 每台 VM 第一端口映射 SSH `-> :22`
+- 其余端口按“外部端口 = 内部端口”做 DNAT
+
+## Notes
+
+- `/api/v1/status` 与 `/status` 是别名
+- `pause` 当前行为是 `stop`
+- VNC 页面的账号/密码粘贴按钮依赖平台保存的凭据
+- 文档如果再漂，以代码为准：
+  - `app/main.py`
+  - `app/schemas.py`
