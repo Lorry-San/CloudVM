@@ -1,7 +1,7 @@
 # Platform API plan
 
-This project is being migrated from a single Telegram traffic monitor script into a
-Proxmox VE VM management platform.
+This project is now a Proxmox VE VM management platform with a FastAPI backend
+and web console frontend.
 
 ## Security model
 
