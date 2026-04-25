@@ -86,6 +86,12 @@ class VmCredentialsResponse(BaseModel):
     password_saved: bool
 
 
+class VmPasswordUpdateRequest(BaseModel):
+    username: str | None = None
+    password: str = Field(min_length=1)
+    reboot: bool = True
+
+
 class VmConfigUpdateRequest(BaseModel):
     cores: int | None = Field(default=None, ge=1)
     memory_mb: int | None = Field(default=None, ge=256)

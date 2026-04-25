@@ -256,6 +256,31 @@ function cloudvmserver_TrafficResetDay($cfg)
     return max(1, min(28, (int)date('j')));
 }
 
+function cloudvmserver_FormatGb($value)
+{
+    if ($value === null || $value === '') return '-';
+    if (!is_numeric($value)) return (string)$value;
+
+    $number = (float)$value;
+    // Values larger than 100 TB are almost certainly byte counters.
+    if ($number > 102400) {
+        $number = $number / 1024 / 1024 / 1024;
+    }
+
+    return number_format($number, 2, '.', '') . ' GB';
+}
+
+function cloudvmserver_FormatTraffic($traffic)
+{
+    if (!is_array($traffic)) return [];
+    $traffic['quota_gb_text'] = cloudvmserver_FormatGb($traffic['quota_gb'] ?? null);
+    $traffic['used_gb_text'] = cloudvmserver_FormatGb($traffic['used_gb'] ?? null);
+    $traffic['remaining_gb_text'] = cloudvmserver_FormatGb($traffic['remaining_gb'] ?? null);
+    $percent = isset($traffic['percent']) && is_numeric($traffic['percent']) ? (float)$traffic['percent'] : 0;
+    $traffic['percent_value'] = max(0, min(100, $percent));
+    return $traffic;
+}
+
 function cloudvmserver_BuildCreateRequest($params)
 {
     $cfg = $params['configoptions'] ?? [];
@@ -641,7 +666,7 @@ function cloudvmserver_ClientAreaOutput($params, $key)
 
         $trafficRes = cloudvmserver_ApiRequest($params, '/api/v1/vms/' . $vmid . '/traffic', null, 'GET');
         if ($trafficRes['ok'] && is_array($trafficRes['data'])) {
-            $traffic = $trafficRes['data'];
+            $traffic = cloudvmserver_FormatTraffic($trafficRes['data']);
         }
 
         $vmRes = cloudvmserver_GetVm($params, $vmid);

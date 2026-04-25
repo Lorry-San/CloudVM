@@ -42,7 +42,7 @@ from app.nat import (
     remove_nat_rules,
 )
 from app.pve_api import PveApi, PveApiError
-from app.reinstall import ReinstallError, resolve_reinstall_template_vmid, run_reinstall
+from app.reinstall import ReinstallError, resolve_reinstall_template_vmid, run_cmd, run_reinstall
 from app.schemas import (
     ConsoleSessionResponse,
     ConsoleTokenRequest,
@@ -56,6 +56,7 @@ from app.schemas import (
     VmConfigUpdateRequest,
     VmCreateRequest,
     VmExpirationRequest,
+    VmPasswordUpdateRequest,
     VmReinstallRequest,
     VmTrafficConfigRequest,
     VmTrafficConfigResponse,
@@ -1080,6 +1081,64 @@ async def set_vm_credentials(
 
 
 @app.post(
+    "/api/v1/vms/{vmid}/password",
+    response_model=VmActionResponse,
+    dependencies=[Depends(require_api_token)],
+)
+async def update_vm_password(
+    vmid: int,
+    req: VmPasswordUpdateRequest,
+    client: PveApi = Depends(pve),
+    settings: Settings = Depends(get_settings),
+) -> VmActionResponse:
+    password = req.password.strip()
+    if not password:
+        raise HTTPException(status_code=400, detail="password cannot be empty")
+
+    saved_credentials = get_vm_credentials(settings, vmid)
+    username = (req.username or saved_credentials.get("username") or "root").strip() or "root"
+
+    try:
+        task = await client.set_vm_config(
+            settings.pve_node,
+            vmid,
+            {
+                "ciuser": username,
+                "cipassword": password,
+            },
+        )
+        try:
+            await run_cmd(
+                ["qm", "cloudinit", "update", str(vmid)],
+                lambda *_args, **_kwargs: None,
+                check=False,
+            )
+        except Exception:
+            pass
+        reboot_task = None
+        if req.reboot:
+            status = await client.vm_status(settings.pve_node, vmid)
+            if str(status.get("status")) == "running":
+                reboot_task = await client.vm_action(settings.pve_node, vmid, "reboot")
+        save_vm_credentials(settings, vmid, username, password)
+        record_task_log(
+            settings,
+            vmid,
+            "password_update",
+            task_id=reboot_task or task,
+            message=f"user={username}",
+        )
+        return VmActionResponse(
+            vmid=vmid,
+            task=task,
+            start_task=reboot_task,
+            status="password_updated",
+        )
+    except PveApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post(
     "/api/v1/consoles/vnc/{vmid}",
     response_model=ConsoleSessionResponse,
     dependencies=[Depends(require_api_token)],
@@ -1150,17 +1209,30 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
     #bar {{
-      height: 40px;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 12px;
-      padding: 0 12px;
+      padding: 8px 12px;
       background: #0f172a;
       border-bottom: 1px solid #334155;
       box-sizing: border-box;
     }}
+    #toolbar {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 32px;
+    }}
+    #paste-row {{
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      width: 100%;
+    }}
     #screen {{
-      height: calc(100% - 40px);
+      height: calc(100% - 104px);
       width: 100%;
       overflow: hidden;
       background: #000;
@@ -1177,6 +1249,19 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
       color: #cbd5e1;
       font-size: 13px;
     }}
+    #paste-box {{
+      flex: 1;
+      min-height: 44px;
+      max-height: 72px;
+      resize: vertical;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      font: 13px/1.4 Consolas, "SFMono-Regular", Monaco, Menlo, monospace;
+    }}
     button:disabled {{
       opacity: .5;
       cursor: not-allowed;
@@ -1185,13 +1270,21 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
 </head>
 <body>
   <div id="bar">
-    <strong>VM {vmid}</strong>
-    <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
-    <button id="type-username" {"disabled" if not has_both_credentials else ""}>输入用户名</button>
-    <button id="type-password" {"disabled" if not has_both_credentials else ""}>输入密码</button>
-    <button id="type-login" {"disabled" if not has_both_credentials else ""}>输入账号密码</button>
-    <button id="send-enter">Enter</button>
-    <span id="status">connecting</span>
+    <div id="toolbar">
+      <strong>VM {vmid}</strong>
+      <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
+      <button id="type-username" {"disabled" if not has_both_credentials else ""}>输入用户名</button>
+      <button id="type-password" {"disabled" if not has_both_credentials else ""}>输入密码</button>
+      <button id="type-login" {"disabled" if not has_both_credentials else ""}>输入账号密码</button>
+      <button id="send-enter">Enter</button>
+      <span id="status">connecting</span>
+    </div>
+    <div id="paste-row">
+      <textarea id="paste-box" placeholder="多行命令 / 文本。换行会按 Enter 发送。"></textarea>
+      <button id="load-clipboard">读取剪贴板</button>
+      <button id="send-paste">发送文本</button>
+      <button id="send-paste-enter">发送并回车</button>
+    </div>
   </div>
   <div id="screen"></div>
   <script type="module">
@@ -1202,6 +1295,7 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
     const pasteUsername = {json.dumps(paste_username)};
     const pastePassword = {json.dumps(paste_password)};
     const status = document.getElementById('status');
+    const pasteBox = document.getElementById('paste-box');
     const rfb = new RFB(document.getElementById('screen'), wsUrl);
     rfb.scaleViewport = true;
     rfb.resizeSession = true;
@@ -1235,7 +1329,8 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
       if (!text) return;
       status.textContent = 'typing';
       rfb.focus();
-      for (const char of text) {{
+      const normalized = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+      for (const char of normalized) {{
         sendKeysym(keysymFor(char));
         await sleep(18);
       }}
@@ -1257,6 +1352,21 @@ def render_vnc_console_page(vmid: int, token: str | None, settings: Settings) ->
     }});
     document.getElementById('send-enter').addEventListener('click', () => {{
       sendKeysym(0xff0d);
+    }});
+    document.getElementById('load-clipboard').addEventListener('click', async () => {{
+      try {{
+        const text = await navigator.clipboard.readText();
+        pasteBox.value = text;
+        status.textContent = text ? 'clipboard loaded' : 'clipboard empty';
+      }} catch (error) {{
+        status.textContent = 'clipboard denied';
+      }}
+    }});
+    document.getElementById('send-paste').addEventListener('click', async () => {{
+      await typeText(pasteBox.value, false);
+    }});
+    document.getElementById('send-paste-enter').addEventListener('click', async () => {{
+      await typeText(pasteBox.value, true);
     }});
   </script>
 </body>

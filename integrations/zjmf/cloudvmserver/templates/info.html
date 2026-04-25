@@ -1,138 +1,398 @@
-<div class="container-fluid">
+<div class="cloudvm-page">
     {if $error_msg}
-    <div class="alert alert-danger">
-        <i class="fas fa-exclamation-triangle"></i> {$error_msg}
+    <div class="cloudvm-alert">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>{$error_msg}</span>
     </div>
     {/if}
 
-    <div class="card shadow mb-3">
-        <div class="card-header py-2">
-            <h6 class="m-0 font-weight-bold text-primary">
-                <i class="fas fa-server mr-2"></i>实例信息
-            </h6>
-        </div>
-        <div class="card-body py-3">
-            <div class="row">
-                <div class="col-md-6 mb-2"><span class="text-muted">实例名称：</span>{$name}</div>
-                <div class="col-md-6 mb-2"><span class="text-muted">VMID：</span>{$vmid}</div>
-                <div class="col-md-6 mb-2"><span class="text-muted">状态：</span>{$status.status|default='unknown'}</div>
-                <div class="col-md-6 mb-2"><span class="text-muted">IP：</span>{$dedicatedip}</div>
-                <div class="col-md-6 mb-2"><span class="text-muted">用户名：</span>{$username}</div>
-                <div class="col-md-6 mb-2"><span class="text-muted">密码：</span>{$password}</div>
+    <section class="cloudvm-hero">
+        <div class="cloudvm-hero-main">
+            <div class="cloudvm-power">
+                <i class="fas fa-server"></i>
+            </div>
+            <div>
+                <div class="cloudvm-eyebrow">CloudVM Instance</div>
+                <h2>{$name}</h2>
+                <div class="cloudvm-sub">
+                    <span>VMID {$vmid}</span>
+                    <span>{$status.status|default='unknown'}</span>
+                    <span>{$dedicatedip|default='-'}</span>
+                </div>
             </div>
         </div>
+
+        {if $console_url}
+        <a href="{$console_url}" target="_blank" class="cloudvm-primary">
+            <i class="fas fa-desktop"></i>
+            <span>打开控制台</span>
+        </a>
+        {/if}
+    </section>
+
+    <div class="cloudvm-grid">
+        <section class="cloudvm-panel">
+            <div class="cloudvm-panel-title">
+                <i class="fas fa-key"></i>
+                <span>登录信息</span>
+            </div>
+            <div class="cloudvm-kv">
+                <div>
+                    <span>用户名</span>
+                    <strong>{$username|default='-'}</strong>
+                </div>
+                <div>
+                    <span>密码</span>
+                    <strong class="cloudvm-code">{$password|default='-'}</strong>
+                </div>
+                <div>
+                    <span>主 IP</span>
+                    <strong>{$dedicatedip|default='-'}</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="cloudvm-panel">
+            <div class="cloudvm-panel-title">
+                <i class="fas fa-chart-line"></i>
+                <span>流量信息</span>
+            </div>
+            <div class="cloudvm-traffic-row">
+                <div>
+                    <span>额度</span>
+                    <strong>{$traffic.quota_gb_text|default='-'}</strong>
+                </div>
+                <div>
+                    <span>已用</span>
+                    <strong>{$traffic.used_gb_text|default='-'}</strong>
+                </div>
+                <div>
+                    <span>剩余</span>
+                    <strong>{$traffic.remaining_gb_text|default='-'}</strong>
+                </div>
+            </div>
+            <div class="cloudvm-progress">
+                <div style="width: {$traffic.percent_value|default='0'}%;"></div>
+            </div>
+        </section>
     </div>
 
-    <div class="card shadow mb-3">
-        <div class="card-header py-2">
-            <h6 class="m-0 font-weight-bold text-primary">
-                <i class="fas fa-network-wired mr-2"></i>网络与流量
-            </h6>
+    {if $assignedips}
+    <section class="cloudvm-panel">
+        <div class="cloudvm-panel-title">
+            <i class="fas fa-network-wired"></i>
+            <span>网络备注</span>
         </div>
-        <div class="card-body py-3">
-            <pre class="mb-3 small bg-light p-3" style="white-space: pre-wrap;">{$assignedips}</pre>
-            <div class="row">
-                <div class="col-md-4 mb-2"><span class="text-muted">流量额度：</span>{$traffic.quota_gb|default='-'}</div>
-                <div class="col-md-4 mb-2"><span class="text-muted">已用流量：</span>{$traffic.used_gb|default='-'}</div>
-                <div class="col-md-4 mb-2"><span class="text-muted">剩余流量：</span>{$traffic.remaining_gb|default='-'}</div>
-            </div>
-        </div>
-    </div>
+        <pre class="cloudvm-meta">{$assignedips}</pre>
+    </section>
+    {/if}
 
     {if $ips}
-    <div class="card shadow mb-3">
-        <div class="card-header py-2">
-            <h6 class="m-0 font-weight-bold text-primary">
-                <i class="fas fa-globe mr-2"></i>IP 绑定
-            </h6>
+    <section class="cloudvm-panel">
+        <div class="cloudvm-panel-title">
+            <i class="fas fa-globe"></i>
+            <span>IP 绑定</span>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th>地址</th>
-                            <th>CIDR</th>
-                            <th>网关</th>
-                            <th>状态</th>
-                            <th>备注</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {foreach $ips as $ip}
-                        <tr>
-                            <td>{$ip.address|default='-'}</td>
-                            <td>{$ip.cidr|default='-'}</td>
-                            <td>{$ip.gateway|default='-'}</td>
-                            <td>{$ip.status|default='-'}</td>
-                            <td>{$ip.note|default='-'}</td>
-                        </tr>
-                        {/foreach}
-                    </tbody>
-                </table>
-            </div>
+        <div class="cloudvm-table-wrap">
+            <table class="cloudvm-table">
+                <thead>
+                    <tr>
+                        <th>地址</th>
+                        <th>CIDR</th>
+                        <th>网关</th>
+                        <th>状态</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {foreach $ips as $ip}
+                    <tr>
+                        <td>{$ip.address|default='-'}</td>
+                        <td>{$ip.cidr|default='-'}</td>
+                        <td>{$ip.gateway|default='-'}</td>
+                        <td><span class="cloudvm-badge">{$ip.status|default='-'}</span></td>
+                        <td>{$ip.note|default='-'}</td>
+                    </tr>
+                    {/foreach}
+                </tbody>
+            </table>
         </div>
-    </div>
+    </section>
     {/if}
 
     {if $tasks}
-    <div class="card shadow mb-3">
-        <div class="card-header py-2">
-            <h6 class="m-0 font-weight-bold text-primary">
-                <i class="fas fa-list mr-2"></i>最近任务
-            </h6>
+    <section class="cloudvm-panel">
+        <div class="cloudvm-panel-title">
+            <i class="fas fa-list-check"></i>
+            <span>最近任务</span>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th>动作</th>
-                            <th>状态</th>
-                            <th>时间</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {foreach $tasks as $task}
-                        <tr>
-                            <td>{$task.action|default='-'}</td>
-                            <td>{$task.status|default='-'}</td>
-                            <td>{$task.created_at|default='-'}</td>
-                        </tr>
-                        {/foreach}
-                    </tbody>
-                </table>
-            </div>
+        <div class="cloudvm-table-wrap">
+            <table class="cloudvm-table">
+                <thead>
+                    <tr>
+                        <th>动作</th>
+                        <th>状态</th>
+                        <th>时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {foreach $tasks as $task}
+                    <tr>
+                        <td>{$task.action|default='-'}</td>
+                        <td><span class="cloudvm-badge">{$task.status|default='-'}</span></td>
+                        <td>{$task.created_at|default='-'}</td>
+                    </tr>
+                    {/foreach}
+                </tbody>
+            </table>
         </div>
-    </div>
-    {/if}
-
-    {if $console_url}
-    <div class="card shadow">
-        <div class="card-header py-2">
-            <h6 class="m-0 font-weight-bold text-primary">
-                <i class="fas fa-desktop mr-2"></i>控制台
-            </h6>
-        </div>
-        <div class="card-body py-3">
-            <a href="{$console_url}" target="_blank" class="btn btn-primary px-4">
-                <i class="fas fa-external-link-alt mr-2"></i>打开 VNC 控制台
-            </a>
-        </div>
-    </div>
+    </section>
     {/if}
 </div>
 
 <style>
-.card {
-    border: none;
+.cloudvm-page {
+    color: #182033;
 }
-.card-header {
-    background-color: #f8f9fc;
-    border-bottom: 1px solid #e3e6f0;
+
+.cloudvm-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fef2f2;
+    color: #991b1b;
 }
-.btn-primary {
-    background-color: #2563eb;
-    border-color: #2563eb;
+
+.cloudvm-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #176bff 0%, #12b7d8 100%);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(23, 107, 255, 0.18);
+}
+
+.cloudvm-hero-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.cloudvm-power {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.cloudvm-eyebrow {
+    margin-bottom: 4px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.78;
+}
+
+.cloudvm-hero h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.cloudvm-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.cloudvm-sub span {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    font-size: 12px;
+}
+
+.cloudvm-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 124px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #fff;
+    color: #176bff;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.cloudvm-primary:hover {
+    color: #0f54c8;
+    text-decoration: none;
+}
+
+.cloudvm-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.cloudvm-panel {
+    margin-bottom: 16px;
+    padding: 18px;
+    border: 1px solid #e7ebf3;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.cloudvm-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 16px;
+    color: #1f2a44;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.cloudvm-panel-title i {
+    color: #176bff;
+}
+
+.cloudvm-kv,
+.cloudvm-traffic-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cloudvm-kv div,
+.cloudvm-traffic-row div {
+    padding: 12px;
+    border-radius: 8px;
+    background: #f7f9fc;
+}
+
+.cloudvm-kv span,
+.cloudvm-traffic-row span {
+    display: block;
+    margin-bottom: 5px;
+    color: #69758c;
+    font-size: 12px;
+}
+
+.cloudvm-kv strong,
+.cloudvm-traffic-row strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #172033;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.cloudvm-code {
+    font-family: Consolas, Monaco, monospace;
+}
+
+.cloudvm-progress {
+    overflow: hidden;
+    height: 8px;
+    margin-top: 14px;
+    border-radius: 999px;
+    background: #eef2f7;
+}
+
+.cloudvm-progress div {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #16c784, #176bff);
+}
+
+.cloudvm-meta {
+    margin: 0;
+    padding: 13px;
+    border-radius: 8px;
+    background: #f7f9fc;
+    color: #334155;
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+.cloudvm-table-wrap {
+    overflow-x: auto;
+}
+
+.cloudvm-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+}
+
+.cloudvm-table th {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e7ebf3;
+    color: #69758c;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    background: #f7f9fc;
+}
+
+.cloudvm-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid #eef2f7;
+    color: #1f2a44;
+    font-size: 13px;
+}
+
+.cloudvm-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.cloudvm-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef7ff;
+    color: #176bff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+@media (max-width: 992px) {
+    .cloudvm-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cloudvm-hero {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 640px) {
+    .cloudvm-kv,
+    .cloudvm-traffic-row {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
