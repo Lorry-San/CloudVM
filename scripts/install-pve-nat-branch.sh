@@ -3,10 +3,10 @@ set -Eeuo pipefail
 
 STAGE="${1:-all}"
 
-APP_DIR="${APP_DIR:-/opt/PVETrafficManager}"
+APP_DIR="${APP_DIR:-/opt/CloudVM}"
 BRANCH="${BRANCH:-beta-2.0.0-nat}"
 PANEL_PORT="${PANEL_PORT:-8080}"
-SERVICE_NAME="${SERVICE_NAME:-pvetrafficmanager}"
+SERVICE_NAME="${SERVICE_NAME:-cloudvm}"
 GITHUB_PROXY="${GITHUB_PROXY:-https://hk.gh-proxy.org}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://mirrors.aliyun.com/debian}"
 DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}"
@@ -170,7 +170,7 @@ ensure_snippets_dir() {
 
 persist_nat_bridge() {
   local marker iface_file
-  marker="# PVETrafficManager NAT bridge"
+  marker="# CloudVM NAT bridge"
   iface_file="/etc/network/interfaces"
 
   info "Persisting ${NAT_BRIDGE} into ${iface_file}"
@@ -218,9 +218,9 @@ deploy_repo() {
     git -C "${APP_DIR}" checkout "${BRANCH}"
     git -C "${APP_DIR}" pull origin "${BRANCH}"
   else
-    tarball_url="$(github_proxy_url "https://github.com/Lorry-San/PVETrafficManager/archive/refs/heads/${BRANCH}.tar.gz")"
-    archive_path="/tmp/PVETrafficManager-${BRANCH}.tar.gz"
-    extract_dir="/tmp/PVETrafficManager-${BRANCH}"
+    tarball_url="$(github_proxy_url "https://github.com/Lorry-San/CloudVM/archive/refs/heads/${BRANCH}.tar.gz")"
+    archive_path="/tmp/CloudVM-${BRANCH}.tar.gz"
+    extract_dir="/tmp/CloudVM-${BRANCH}"
     rm -rf "${extract_dir}" "${APP_DIR}"
     mkdir -p "${extract_dir}"
     download_file "${tarball_url}" "${archive_path}"
@@ -277,7 +277,7 @@ write_service() {
   info "Writing systemd service"
   cat >/etc/systemd/system/${SERVICE_NAME}.service <<EOF
 [Unit]
-Description=PVETrafficManager NAT Branch
+Description=CloudVM NAT Branch
 After=network-online.target
 Wants=network-online.target
 

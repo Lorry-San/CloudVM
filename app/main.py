@@ -66,7 +66,7 @@ from app.tasks import list_task_logs, record_task_log
 from app.traffic import get_vm_traffic_usage, set_vm_traffic_config
 
 app = FastAPI(
-    title="PVETrafficManager Platform API",
+    title="CloudVM Platform API",
     version="0.1.0",
     docs_url=None,
     redoc_url=None,

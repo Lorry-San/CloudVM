@@ -1,1 +1,1 @@
-"""PVETrafficManager platform API package."""
+"""CloudVM platform API package."""

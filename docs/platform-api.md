@@ -8,13 +8,13 @@ and web console frontend.
 Users must never receive the Proxmox VE backend URL, PVE login page, API token,
 VNC ticket, or terminal ticket.
 
-The browser talks only to PVETrafficManager:
+The browser talks only to CloudVM:
 
 - REST API: `https://panel.example.com/api/v1/...`
 - VNC WebSocket: `wss://panel.example.com/ws/vnc/{vmid}`
 - xterm.js WebSocket: `wss://panel.example.com/ws/xterm/{vmid}`
 
-PVETrafficManager talks to Proxmox VE privately:
+CloudVM talks to Proxmox VE privately:
 
 - `POST /nodes/{node}/qemu/{vmid}/vncproxy`
 - `GET /nodes/{node}/qemu/{vmid}/vncwebsocket`

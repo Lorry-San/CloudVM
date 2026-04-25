@@ -1,6 +1,6 @@
-# PVETrafficManager `beta-2.0.0-nat`
+# CloudVM `beta-2.0.0-nat`
 
-这是 `PVETrafficManager` 的 NAT 分支版本。
+这是 `CloudVM` 的 NAT 分支版本。
 
 这个分支在原有 PVE VM 管理平台基础上，增加了一套默认可用的 NAT 网络模式：
 
@@ -144,14 +144,14 @@ export GITHUB_PROXY=https://hk.gh-proxy.org
 
 ```bash
 cd /opt
-git clone -b beta-2.0.0-nat https://github.com/Lorry-San/PVETrafficManager.git
-cd /opt/PVETrafficManager
+git clone -b beta-2.0.0-nat https://github.com/Lorry-San/CloudVM.git
+cd /opt/CloudVM
 ```
 
 如果目录已经存在：
 
 ```bash
-cd /opt/PVETrafficManager
+cd /opt/CloudVM
 git fetch origin
 git checkout beta-2.0.0-nat
 git pull origin beta-2.0.0-nat
@@ -167,7 +167,7 @@ apt install -y python3 python3-venv python3-pip git iptables
 ### 3. 创建虚拟环境
 
 ```bash
-cd /opt/PVETrafficManager
+cd /opt/CloudVM
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
@@ -197,17 +197,17 @@ nano .env
 创建服务文件：
 
 ```bash
-cat >/etc/systemd/system/pvetrafficmanager.service <<'EOF'
+cat >/etc/systemd/system/cloudvm.service <<'EOF'
 [Unit]
-Description=PVETrafficManager
+Description=CloudVM
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/PVETrafficManager
+WorkingDirectory=/opt/CloudVM
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/PVETrafficManager/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+ExecStart=/opt/CloudVM/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=3
 
@@ -220,8 +220,8 @@ EOF
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now pvetrafficmanager
-systemctl status pvetrafficmanager --no-pager -l
+systemctl enable --now cloudvm
+systemctl status cloudvm --no-pager -l
 ```
 
 ### 6. 验证 NAT 是否工作
@@ -229,7 +229,7 @@ systemctl status pvetrafficmanager --no-pager -l
 查看服务：
 
 ```bash
-systemctl status pvetrafficmanager --no-pager -l
+systemctl status cloudvm --no-pager -l
 ```
 
 查看 `nat0`：
@@ -313,14 +313,14 @@ PLATFORM_API_TOKEN
 以后更新 NAT 分支：
 
 ```bash
-cd /opt/PVETrafficManager
+cd /opt/CloudVM
 git fetch origin
 git checkout beta-2.0.0-nat
 git pull origin beta-2.0.0-nat
 source .venv/bin/activate
 pip install -r requirements.txt
-systemctl restart pvetrafficmanager
-systemctl status pvetrafficmanager --no-pager -l
+systemctl restart cloudvm
+systemctl status cloudvm --no-pager -l
 ```
 
 ## 当前已知限制
