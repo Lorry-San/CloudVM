@@ -337,6 +337,22 @@ bash scripts/download-cloud-image.sh debian-12 \
 
 The script writes the image to `/var/lib/vz/template/qemu` by default and then prints the suggested `qm create` / `qm importdisk` commands for Proxmox.
 
+If you want an interactive import flow closer to a one-shot template import script, use:
+
+```bash
+bash scripts/image-import.sh
+```
+
+It will:
+
+- let you choose an official cloud image
+- optionally modify SSH/cloud-init settings
+- download the image
+- create a VM in Proxmox
+- import the disk
+- attach cloud-init
+- convert the VM into a template
+
 ## 当前已知限制
 
 - 这版 NAT 逻辑按 `/24` 设计
