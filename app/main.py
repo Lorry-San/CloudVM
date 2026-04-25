@@ -990,7 +990,11 @@ async def delete_vm(
     try:
         nat_lease = get_nat_lease(settings, vmid)
         try:
-            await client.vm_action(settings.pve_node, vmid, "stop")
+            status = await client.vm_status(settings.pve_node, vmid)
+            if str(status.get("status")) == "running":
+                stop_task = await client.vm_action(settings.pve_node, vmid, "stop")
+                record_task_log(settings, vmid, "stop_before_delete", task_id=stop_task)
+                await client.wait_for_task(settings.pve_node, stop_task)
         except PveApiError:
             pass
         task = await client.delete_vm(settings.pve_node, vmid)

@@ -388,6 +388,12 @@ function cloudvmserver_TerminateAccount($params)
 {
     $vmid = cloudvmserver_GetVmid($params);
     if (!$vmid) return cloudvmserver_Fail('未找到 VMID');
+
+    $off = cloudvmserver_ApiRequest($params, '/api/v1/vms/' . $vmid . '/pause', null, 'POST');
+    if (!$off['ok']) {
+        cloudvmserver_debug('stop before delete failed', $off);
+    }
+
     $res = cloudvmserver_ApiRequest($params, '/api/v1/vms/' . $vmid, null, 'DELETE');
     return $res['ok'] ? cloudvmserver_Success('删除任务已提交') : cloudvmserver_Fail(cloudvmserver_Error($res, '删除失败'));
 }
