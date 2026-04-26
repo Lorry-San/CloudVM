@@ -307,6 +307,7 @@
             <button id="btn-console">控制台</button>
             <button id="btn-config">配置</button>
             <button id="btn-paste">凭据</button>
+            <button id="btn-password">Password</button>
             <button id="btn-start">开机</button>
             <button id="btn-reinstall">重装系统</button>
             <button class="danger" id="btn-delete">删除</button>
@@ -703,6 +704,27 @@
       await api(`/api/v1/vms/${vmid}/credentials`, { method: 'PUT', body: JSON.stringify({ username: username || null, password: password || null }) });
       return true;
     }
+    async function updatePassword() {
+      const username = prompt(`VM ${vmid} username (default root)`, 'root');
+      if (username === null) return;
+      const password = prompt(`VM ${vmid} new password (updates cloud-init)`);
+      if (password === null) return;
+      if (!password) {
+        throw new Error('Please enter a new password');
+      }
+      const reboot = confirm(`Reboot VM ${vmid} after password update?\nFor running cloud-init guests, reboot is the safer way to apply it.`);
+      await api(`/api/v1/vms/${vmid}/password`, {
+        method: 'POST',
+        body: JSON.stringify({
+          username: username || 'root',
+          password,
+          reboot,
+        }),
+      });
+      await load();
+      return true;
+    }
+
     async function updateConfig() {
       const cores = prompt(`VM ${vmid} CPU 核心，留空不改`, lastStatus?.cpu?.cpus || lastVmRaw?.cpus || '');
       if (cores === null) return;
@@ -805,6 +827,7 @@
     $('btn-console').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '打开 VNC 中', openConsole, 'VNC 已打开'));
     $('btn-config').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '配置提交中', updateConfig, '配置已提交'));
     $('btn-paste').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
+    $('btn-password').addEventListener('click', (event) => runWithFeedback(event.currentTarget, 'Updating password', updatePassword, 'Password update submitted'));
     $('btn-cred').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
     $('btn-start').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '开机中', () => action(`/api/v1/vms/${vmid}/resume`), '开机任务已提交'));
     $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '关机中', () => action(`/api/v1/vms/${vmid}/pause`), '关机任务已提交'));
