@@ -307,7 +307,7 @@
             <button id="btn-console">控制台</button>
             <button id="btn-config">配置</button>
             <button id="btn-paste">凭据</button>
-            <button id="btn-password">Password</button>
+            <button id="btn-password">&#37325;&#32622;&#23494;&#30721;</button>
             <button id="btn-start">开机</button>
             <button id="btn-reinstall">重装系统</button>
             <button class="danger" id="btn-delete">删除</button>
@@ -705,18 +705,16 @@
       return true;
     }
     async function updatePassword() {
-      const username = prompt(`VM ${vmid} username (default root)`, 'root');
-      if (username === null) return;
-      const password = prompt(`VM ${vmid} new password (updates cloud-init)`);
+      const password = prompt(`VM ${vmid} \u65b0\u5bc6\u7801\uff08\u53ea\u66f4\u65b0 cloud-init \u5bc6\u7801\uff09`);
       if (password === null) return;
       if (!password) {
-        throw new Error('Please enter a new password');
+        throw new Error('\u8bf7\u8f93\u5165\u65b0\u5bc6\u7801');
       }
-      const reboot = confirm(`Reboot VM ${vmid} after password update?\nFor running cloud-init guests, reboot is the safer way to apply it.`);
+      const reboot = confirm(`\u662f\u5426\u5728\u91cd\u7f6e\u5bc6\u7801\u540e\u91cd\u542f VM ${vmid}\uff1f\n\u8fd0\u884c\u4e2d\u7684 cloud-init \u865a\u62df\u673a\u66f4\u7a33\u59a5\u7684\u751f\u6548\u65b9\u5f0f\u662f\u91cd\u542f\u3002`);
       await api(`/api/v1/vms/${vmid}/password`, {
         method: 'POST',
         body: JSON.stringify({
-          username: username || 'root',
+          username: 'root',
           password,
           reboot,
         }),
@@ -827,7 +825,7 @@
     $('btn-console').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '打开 VNC 中', openConsole, 'VNC 已打开'));
     $('btn-config').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '配置提交中', updateConfig, '配置已提交'));
     $('btn-paste').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
-    $('btn-password').addEventListener('click', (event) => runWithFeedback(event.currentTarget, 'Updating password', updatePassword, 'Password update submitted'));
+    $('btn-password').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '\u91cd\u7f6e\u5bc6\u7801\u4e2d', updatePassword, '\u91cd\u7f6e\u5bc6\u7801\u4efb\u52a1\u5df2\u63d0\u4ea4'));
     $('btn-cred').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '保存凭据中', saveCred, '凭据已保存'));
     $('btn-start').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '开机中', () => action(`/api/v1/vms/${vmid}/resume`), '开机任务已提交'));
     $('btn-stop').addEventListener('click', (event) => runWithFeedback(event.currentTarget, '关机中', () => action(`/api/v1/vms/${vmid}/pause`), '关机任务已提交'));

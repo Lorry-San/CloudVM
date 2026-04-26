@@ -366,18 +366,18 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
     <div id="toolbar">
       <strong>VM {vmid}</strong>
       <button id="send-ctrl-alt-del">Ctrl+Alt+Del</button>
-      <button id="type-username" {"disabled" if not has_both_credentials else ""}>Username</button>
-      <button id="type-password" {"disabled" if not has_both_credentials else ""}>Password</button>
-      <button id="type-login" {"disabled" if not has_both_credentials else ""}>Username+Password</button>
+      <button id="type-username" {"disabled" if not has_both_credentials else ""}>&#36755;&#20837;&#29992;&#25143;&#21517;</button>
+      <button id="type-password" {"disabled" if not has_both_credentials else ""}>&#36755;&#20837;&#23494;&#30721;</button>
+      <button id="type-login" {"disabled" if not has_both_credentials else ""}>&#36755;&#20837;&#36134;&#21495;&#23494;&#30721;</button>
       <button id="send-enter">Enter</button>
-      <button id="toggle-clipboard">Show Clipboard</button>
+      <button id="toggle-clipboard">&#26174;&#31034;&#21098;&#36148;&#26495;</button>
       <span id="status">connecting</span>
     </div>
     <div id="paste-row">
-      <textarea id="paste-box" placeholder="Multi-line commands or text. New lines will send Enter."></textarea>
-      <button id="load-clipboard">Read Clipboard</button>
-      <button id="send-paste">Send Text</button>
-      <button id="send-paste-enter">Send+Enter</button>
+      <textarea id="paste-box" placeholder="&#25903;&#25345;&#22810;&#34892;&#36755;&#20837;&#12290;&#25442;&#34892;&#20250;&#21457;&#36865; Enter&#12290;"></textarea>
+      <button id="load-clipboard">&#35835;&#21462;&#21098;&#36148;&#26495;</button>
+      <button id="send-paste">&#21457;&#36865;&#25991;&#26412;</button>
+      <button id="send-paste-enter">&#21457;&#36865;&#24182;&#22238;&#36710;</button>
     </div>
   </div>
   <div id="screen"></div>
@@ -397,12 +397,12 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
     rfb.resizeSession = true;
     rfb.viewOnly = false;
 
-    rfb.addEventListener('connect', () => status.textContent = 'connected');
+    rfb.addEventListener('connect', () => status.textContent = '\u5df2\u8fde\u63a5');
     rfb.addEventListener('disconnect', (event) => {{
-      status.textContent = event.detail.clean ? 'disconnected' : 'connection failed';
+      status.textContent = event.detail.clean ? '\u5df2\u65ad\u5f00' : '\u8fde\u63a5\u5931\u8d25';
     }});
     rfb.addEventListener('credentialsrequired', () => {{
-      status.textContent = 'credentials required';
+      status.textContent = '\u9700\u8981\u51ed\u636e';
     }});
     document.getElementById('send-ctrl-alt-del').addEventListener('click', () => {{
       rfb.sendCtrlAltDel();
@@ -490,7 +490,7 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
     }}
     async function typeText(text, pressEnter = false) {{
       if (!text) return;
-      status.textContent = 'typing';
+      status.textContent = '\u8f93\u5165\u4e2d';
       rfb.focus();
       const normalized = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
       for (const char of normalized) {{
@@ -500,7 +500,7 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
       if (pressEnter) {{
         sendKeysym(0xff0d);
       }}
-      status.textContent = 'connected';
+      status.textContent = '\u5df2\u8fde\u63a5';
     }}
     document.getElementById('type-username').addEventListener('click', () => {{
       typeText(pasteUsername, true);
@@ -518,7 +518,7 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
     }});
     toggleClipboardButton.addEventListener('click', () => {{
       const opened = body.classList.toggle('clipboard-open');
-      toggleClipboardButton.textContent = opened ? 'Hide Clipboard' : 'Show Clipboard';
+      toggleClipboardButton.textContent = opened ? '\u9690\u85cf\u526a\u8d34\u677f' : '\u663e\u793a\u526a\u8d34\u677f';
       if (opened) {{
         pasteBox.focus();
       }}
@@ -527,9 +527,9 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
       try {{
         const text = await navigator.clipboard.readText();
         pasteBox.value = text;
-        status.textContent = text ? 'clipboard loaded' : 'clipboard empty';
+        status.textContent = text ? '\u526a\u8d34\u677f\u5df2\u8bfb\u53d6' : '\u526a\u8d34\u677f\u4e3a\u7a7a';
       }} catch (error) {{
-        status.textContent = 'clipboard denied';
+        status.textContent = '\u8bfb\u53d6\u526a\u8d34\u677f\u5931\u8d25';
       }}
     }});
     document.getElementById('send-paste').addEventListener('click', async () => {{
