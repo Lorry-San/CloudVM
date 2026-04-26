@@ -483,9 +483,7 @@ def render_vnc_console_page_v2(vmid: int, token: str | None, settings: Settings)
         return;
       }}
       if (/[A-Z]/.test(char)) {{
-        keyDown(SHIFT_KEYSYM);
-        sendKeysym(keysymFor(char.toLowerCase()));
-        keyUp(SHIFT_KEYSYM);
+        sendKeysym(keysymFor(char));
         return;
       }}
       sendKeysym(keysymFor(char));
