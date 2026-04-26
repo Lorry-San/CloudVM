@@ -259,6 +259,47 @@ PUT /api/v1/vms/{vmid}/config
 - `network_rate`：修改 `net0` 的 PVE 速率限制
 - `reboot=true` 且 VM 当前运行中时，会自动触发一次重启
 
+## VM Password Update
+
+```http
+POST /api/v1/vms/{vmid}/password
+```
+
+Request body:
+
+```json
+{
+  "username": "root",
+  "password": "NewPass123!",
+  "reboot": true
+}
+```
+
+Notes:
+- This updates `ciuser` and `cipassword` on the VM config.
+- The backend runs `qm cloudinit update <vmid>` after writing the config.
+- If the VM is running and `reboot=true`, the platform triggers a reboot so the new password can apply more reliably.
+- The platform also updates the saved credentials record used by the UI and VNC helper.
+- This is a cloud-init based password update, not an in-guest `passwd` execution.
+
+Response example:
+
+```json
+{
+  "vmid": 100,
+  "task": "UPID:pve01:...",
+  "start_task": "UPID:pve01:...",
+  "allocated_ip": null,
+  "nat_ip": null,
+  "ssh_port": null,
+  "port_range_start": null,
+  "port_range_end": null,
+  "network_mode": null,
+  "released_ip": null,
+  "status": "password_updated"
+}
+```
+
 ## VM Reinstall
 
 ```http
