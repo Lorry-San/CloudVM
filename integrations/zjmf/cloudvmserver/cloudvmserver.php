@@ -551,14 +551,24 @@ function cloudvmserver_CrackPassword($params, $new_pass)
 {
     $vmid = cloudvmserver_GetVmid($params);
     if (!$vmid) return cloudvmserver_Fail('未找到 VMID');
-    $username = $params['username'] ?? (($params['configoptions']['ci_user'] ?? '') ?: 'root');
-    $res = cloudvmserver_ApiRequest($params, '/api/v1/vms/' . $vmid . '/credentials', [
+    $new_pass = trim((string)$new_pass);
+    if ($new_pass === '') return cloudvmserver_Fail('新密码不能为空');
+
+    $cfg = $params['configoptions'] ?? [];
+    $host = cloudvmserver_GetHost($params);
+    $username = trim((string)($params['username'] ?? ''));
+    if ($username === '') $username = trim((string)($host['username'] ?? ''));
+    if ($username === '') $username = trim((string)($cfg['ci_user'] ?? ''));
+    if ($username === '') $username = 'root';
+
+    $res = cloudvmserver_ApiRequest($params, '/api/v1/vms/' . $vmid . '/password', [
         'username' => $username,
         'password' => $new_pass,
-    ], 'PUT');
-    if (!$res['ok']) return cloudvmserver_Fail(cloudvmserver_Error($res, '更新控制台凭据失败'));
-    cloudvmserver_SaveHost($params, ['password' => $new_pass]);
-    return cloudvmserver_Success('控制台凭据已更新');
+        'reboot'   => true,
+    ], 'POST');
+    if (!$res['ok']) return cloudvmserver_Fail(cloudvmserver_Error($res, '密码重置失败'));
+    cloudvmserver_SaveHost($params, ['username' => $username, 'password' => $new_pass]);
+    return cloudvmserver_Success('密码重置任务已提交，虚拟机将自动重启以应用新密码');
 }
 
 function cloudvmserver_TrafficReset($params)
