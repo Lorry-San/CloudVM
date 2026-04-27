@@ -41,6 +41,13 @@ function cloudvmserver_ConfigOptions()
             'key'         => 'network_mode',
             'options'     => ['nat' => 'NAT', 'public' => '公网桥接'],
         ],
+        'nat_return_ip' => [
+            'type'        => 'text',
+            'name'        => 'NAT 返回 IP',
+            'description' => 'NAT 产品显示给用户连接的公网 IP，留空使用服务器 IP',
+            'default'     => '',
+            'key'         => 'nat_return_ip',
+        ],
         'ci_user' => [
             'type'        => 'text',
             'name'        => '默认用户名',
@@ -241,6 +248,17 @@ function cloudvmserver_Option($cfg, $keys, $default = null)
     return $default;
 }
 
+function cloudvmserver_NatReturnIp($params, $source = [])
+{
+    $cfg = $params['configoptions'] ?? [];
+    $ip = trim((string)cloudvmserver_Option($cfg, ['nat_return_ip', 'nat_public_ip', 'return_ip', 'NAT返回IP'], ''));
+    if ($ip === '' && is_array($source)) {
+        $ip = trim((string)($source['external_host'] ?? $source['public_ip'] ?? ''));
+    }
+    if ($ip === '') $ip = trim((string)($params['server_ip'] ?? ''));
+    return $ip;
+}
+
 function cloudvmserver_IntOption($cfg, $keys, $default)
 {
     $value = cloudvmserver_Option($cfg, $keys, $default);
@@ -358,11 +376,16 @@ function cloudvmserver_CreateAccount($params)
     $vmid = $data['vmid'] ?? null;
     if (!$vmid) return cloudvmserver_Fail('创建成功但 API 未返回 vmid');
 
-    $ip = $data['allocated_ip'] ?? $data['nat_ip'] ?? '';
+    $networkMode = strtolower((string)($data['network_mode'] ?? $request['network']['mode'] ?? ''));
+    $isNat = $networkMode === 'nat' || !empty($data['nat_ip']);
+    $internalIp = $data['nat_ip'] ?? '';
+    $ip = $isNat ? cloudvmserver_NatReturnIp($params, $data) : ($data['allocated_ip'] ?? '');
     $meta = cloudvmserver_BuildMeta([
         'vmid'             => $vmid,
-        'network_mode'     => $data['network_mode'] ?? '',
+        'network_mode'     => $networkMode,
+        'public_ip'        => $isNat ? $ip : ($data['allocated_ip'] ?? ''),
         'allocated_ip'     => $data['allocated_ip'] ?? '',
+        'internal_ip'      => $internalIp,
         'nat_ip'           => $data['nat_ip'] ?? '',
         'ssh_port'         => $data['ssh_port'] ?? '',
         'port_range_start' => $data['port_range_start'] ?? '',
@@ -489,9 +512,13 @@ function cloudvmserver_Sync($params)
     if ($raw === 'running') $update['domainstatus'] = 'Active';
     if (in_array($raw, ['stopped', 'paused', 'suspended'], true)) $update['domainstatus'] = 'Suspended';
     if (!empty($data['nat']['ssh_port'])) {
+        $natReturnIp = cloudvmserver_NatReturnIp($params, $data['nat']);
+        if ($natReturnIp !== '') $update['dedicatedip'] = $natReturnIp;
         $update['assignedips'] = cloudvmserver_BuildMeta([
             'vmid' => $vmid,
             'network_mode' => 'nat',
+            'public_ip' => $natReturnIp,
+            'internal_ip' => $data['nat']['address'] ?? '',
             'nat_ip' => $data['nat']['address'] ?? '',
             'external_host' => $data['nat']['external_host'] ?? '',
             'ssh_port' => $data['nat']['ssh_port'],
@@ -665,11 +692,24 @@ function cloudvmserver_ClientAreaOutput($params, $key)
     if ($dedicatedIp === '') $dedicatedIp = trim((string)($host['dedicatedip'] ?? ''));
     $assignedIps = trim((string)($params['assignedips'] ?? ''));
     if ($assignedIps === '') $assignedIps = trim((string)($host['assignedips'] ?? ''));
+    $meta = cloudvmserver_ParseMeta($assignedIps);
+    $networkMode = strtolower((string)($meta['network_mode'] ?? ''));
+    $internalIp = trim((string)($meta['internal_ip'] ?? $meta['nat_ip'] ?? ''));
+    if ($networkMode === 'nat') {
+        $natIp = cloudvmserver_NatReturnIp($params, $meta);
+        if ($natIp !== '') $dedicatedIp = $natIp;
+    }
 
     if ($vmid) {
         $statusRes = cloudvmserver_ApiRequest($params, '/api/v1/status?vmid=' . $vmid, null, 'GET');
         if ($statusRes['ok'] && is_array($statusRes['data'])) {
             $status = $statusRes['data'];
+            if (!empty($status['nat']) && is_array($status['nat'])) {
+                $networkMode = 'nat';
+                if (!empty($status['nat']['address'])) $internalIp = trim((string)$status['nat']['address']);
+                $natIp = cloudvmserver_NatReturnIp($params, $status['nat']);
+                if ($natIp !== '') $dedicatedIp = $natIp;
+            }
         } else {
             $errorMsg = cloudvmserver_Error($statusRes, '获取实例状态失败');
         }
@@ -717,6 +757,8 @@ function cloudvmserver_ClientAreaOutput($params, $key)
             'username'    => $username,
             'password'    => $password,
             'dedicatedip' => $dedicatedIp,
+            'internal_ip' => $internalIp,
+            'network_mode' => $networkMode,
             'assignedips' => $assignedIps,
             'vm'          => $vm,
             'ips'         => $ips,

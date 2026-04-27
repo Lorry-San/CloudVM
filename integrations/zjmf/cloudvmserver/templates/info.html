@@ -49,6 +49,12 @@
                     <span>主 IP</span>
                     <strong>{$dedicatedip|default='-'}</strong>
                 </div>
+                {if $internal_ip}
+                <div>
+                    <span>内网 IP</span>
+                    <strong>{$internal_ip}</strong>
+                </div>
+                {/if}
             </div>
         </section>
 
