@@ -13,6 +13,9 @@ class NatError(RuntimeError):
     pass
 
 
+_OLD_NAT_RULES_CLEANED = False
+
+
 def nat_network(settings: Settings) -> IPv4Network:
     network = ip_network(settings.nat_network_cidr, strict=False)
     if not isinstance(network, IPv4Network):
@@ -43,11 +46,15 @@ def external_host(settings: Settings) -> str:
 
 
 def port_block_for_ip(settings: Settings, address: str) -> tuple[int, int, int]:
+    if settings.nat_ports_per_vm <= 0:
+        raise NatError("NAT ports per VM must be greater than 0")
     host_octet = int(str(address).split(".")[-1])
     if host_octet < 1 or host_octet > 253:
         raise NatError(f"Unsupported NAT host octet: {host_octet}")
     start = settings.nat_port_start + (host_octet - 1) * settings.nat_ports_per_vm
     end = start + settings.nat_ports_per_vm - 1
+    if start < 1 or end > 65535:
+        raise NatError(f"NAT port range is outside 1-65535: {start}-{end}")
     return start, end, start
 
 
@@ -142,6 +149,101 @@ def release_nat_lease(settings: Settings, vmid: int) -> NatLease | None:
     return lease
 
 
+def nat_ingress_interfaces(settings: Settings) -> list[str]:
+    return [
+        item.strip()
+        for item in settings.nat_ingress_interfaces.replace(";", ",").split(",")
+        if item.strip()
+    ]
+
+
+def dnat_match_args(settings: Settings, ingress_interface: str | None) -> list[str]:
+    if ingress_interface:
+        return ["-i", ingress_interface]
+    return ["!", "-i", settings.nat_bridge]
+
+
+def ingress_match_args(settings: Settings) -> list[list[str]]:
+    interfaces = nat_ingress_interfaces(settings)
+    if interfaces:
+        return [dnat_match_args(settings, interface) for interface in interfaces]
+    return [dnat_match_args(settings, None)]
+
+
+def dnat_delete_commands(
+    settings: Settings,
+    protocol: str,
+    port: int,
+    destination: str,
+) -> list[list[str]]:
+    return [
+        ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", *match, "-p", protocol, "--dport", str(port), "-j", "DNAT", "--to-destination", destination]
+        for match in ingress_match_args(settings)
+    ]
+
+
+def dnat_ensure_commands(
+    settings: Settings,
+    protocol: str,
+    port: int,
+    destination: str,
+) -> list[tuple[list[str], list[str]]]:
+    return [
+        (
+            ["iptables", "-w", "-t", "nat", "-C", *delete_cmd[5:]],
+            ["iptables", "-w", "-t", "nat", "-A", *delete_cmd[5:]],
+        )
+        for delete_cmd in dnat_delete_commands(settings, protocol, port, destination)
+    ]
+
+
+def stale_dnat_delete_commands(
+    uplink: str,
+    protocol: str,
+    port: int,
+    destination: str,
+) -> list[list[str]]:
+    base = ["iptables", "-w", "-t", "nat", "-D", "PREROUTING"]
+    match = ["-p", protocol, "--dport", str(port), "-j", "DNAT", "--to-destination", destination]
+    return [
+        [*base, "-i", uplink, *match],
+        [*base, *match],
+    ]
+
+
+async def cleanup_old_nat_rules(settings: Settings) -> None:
+    network = nat_network(settings)
+    bridge = settings.nat_bridge
+    uplink = await detect_uplink_interface(settings)
+
+    await delete_iptables_rule(
+        ["iptables", "-w", "-D", "FORWARD", "-i", uplink, "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+    )
+    await delete_iptables_rule(
+        ["iptables", "-w", "-D", "FORWARD", "-i", bridge, "-s", str(network), "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+    )
+    await delete_iptables_rule(
+        ["iptables", "-w", "-D", "FORWARD", "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
+    )
+    for lease in list_nat_leases(settings):
+        for command in stale_dnat_delete_commands(uplink, "tcp", lease.ssh_port, f"{lease.address}:22"):
+            await delete_iptables_rule(command)
+        for port in range(lease.ssh_port + 1, lease.port_end + 1):
+            destination = f"{lease.address}:{port}"
+            for command in stale_dnat_delete_commands(uplink, "tcp", port, destination):
+                await delete_iptables_rule(command)
+            for command in stale_dnat_delete_commands(uplink, "udp", port, destination):
+                await delete_iptables_rule(command)
+
+
+async def cleanup_old_nat_rules_once(settings: Settings) -> None:
+    global _OLD_NAT_RULES_CLEANED
+    if _OLD_NAT_RULES_CLEANED:
+        return
+    await cleanup_old_nat_rules(settings)
+    _OLD_NAT_RULES_CLEANED = True
+
+
 async def ensure_nat_ready(settings: Settings) -> None:
     if not settings.nat_enabled:
         raise NatError("NAT mode is disabled")
@@ -149,6 +251,8 @@ async def ensure_nat_ready(settings: Settings) -> None:
     host_ip = nat_host_address(settings)
     bridge = settings.nat_bridge
     uplink = await detect_uplink_interface(settings)
+
+    await cleanup_old_nat_rules_once(settings)
 
     await ensure_bridge(bridge)
     await ensure_address(bridge, f"{host_ip}/{network.prefixlen}")
@@ -163,6 +267,11 @@ async def ensure_nat_ready(settings: Settings) -> None:
         ["iptables", "-w", "-C", "FORWARD", "-i", uplink, "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
         ["iptables", "-w", "-A", "FORWARD", "-i", uplink, "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"],
     )
+    for match in ingress_match_args(settings):
+        await ensure_iptables_rule(
+            ["iptables", "-w", "-C", "FORWARD", *match, "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "NEW,ESTABLISHED,RELATED", "-j", "ACCEPT"],
+            ["iptables", "-w", "-A", "FORWARD", *match, "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "NEW,ESTABLISHED,RELATED", "-j", "ACCEPT"],
+        )
     await ensure_iptables_rule(
         ["iptables", "-w", "-t", "nat", "-C", "POSTROUTING", "-s", str(network), "-o", uplink, "-j", "MASQUERADE"],
         ["iptables", "-w", "-t", "nat", "-A", "POSTROUTING", "-s", str(network), "-o", uplink, "-j", "MASQUERADE"],
@@ -170,37 +279,26 @@ async def ensure_nat_ready(settings: Settings) -> None:
 
 
 async def ensure_nat_rules(settings: Settings, lease: NatLease) -> None:
-    uplink = await detect_uplink_interface(settings)
     await ensure_nat_ready(settings)
-    await ensure_iptables_rule(
-        ["iptables", "-w", "-t", "nat", "-C", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(lease.ssh_port), "-j", "DNAT", "--to-destination", f"{lease.address}:22"],
-        ["iptables", "-w", "-t", "nat", "-A", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(lease.ssh_port), "-j", "DNAT", "--to-destination", f"{lease.address}:22"],
-    )
+    for check_cmd, add_cmd in dnat_ensure_commands(settings, "tcp", lease.ssh_port, f"{lease.address}:22"):
+        await ensure_iptables_rule(check_cmd, add_cmd)
     for port in range(lease.ssh_port + 1, lease.port_end + 1):
         destination = f"{lease.address}:{port}"
-        await ensure_iptables_rule(
-            ["iptables", "-w", "-t", "nat", "-C", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-            ["iptables", "-w", "-t", "nat", "-A", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-        )
-        await ensure_iptables_rule(
-            ["iptables", "-w", "-t", "nat", "-C", "PREROUTING", "-i", uplink, "-p", "udp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-            ["iptables", "-w", "-t", "nat", "-A", "PREROUTING", "-i", uplink, "-p", "udp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-        )
+        for check_cmd, add_cmd in dnat_ensure_commands(settings, "tcp", port, destination):
+            await ensure_iptables_rule(check_cmd, add_cmd)
+        for check_cmd, add_cmd in dnat_ensure_commands(settings, "udp", port, destination):
+            await ensure_iptables_rule(check_cmd, add_cmd)
 
 
 async def remove_nat_rules(settings: Settings, lease: NatLease) -> None:
-    uplink = await detect_uplink_interface(settings)
-    await delete_iptables_rule(
-        ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(lease.ssh_port), "-j", "DNAT", "--to-destination", f"{lease.address}:22"],
-    )
+    for command in dnat_delete_commands(settings, "tcp", lease.ssh_port, f"{lease.address}:22"):
+        await delete_iptables_rule(command)
     for port in range(lease.ssh_port + 1, lease.port_end + 1):
         destination = f"{lease.address}:{port}"
-        await delete_iptables_rule(
-            ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", "-i", uplink, "-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-        )
-        await delete_iptables_rule(
-            ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", "-i", uplink, "-p", "udp", "--dport", str(port), "-j", "DNAT", "--to-destination", destination],
-        )
+        for command in dnat_delete_commands(settings, "tcp", port, destination):
+            await delete_iptables_rule(command)
+        for command in dnat_delete_commands(settings, "udp", port, destination):
+            await delete_iptables_rule(command)
 
 
 async def ensure_bridge(bridge: str) -> None:

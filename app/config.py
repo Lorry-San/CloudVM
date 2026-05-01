@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     nat_ports_per_vm: int = Field(default=10, alias="PVE_NAT_PORTS_PER_VM")
     nat_nameserver: str = Field(default="8.8.8.8", alias="PVE_NAT_NAMESERVER")
     nat_uplink_interface: str = Field(default="", alias="PVE_NAT_UPLINK_INTERFACE")
+    nat_ingress_interfaces: str = Field(default="", alias="PVE_NAT_INGRESS_INTERFACES")
     image_templates: dict[str, int] = Field(
         default_factory=dict,
         alias="PVE_IMAGE_TEMPLATES",
