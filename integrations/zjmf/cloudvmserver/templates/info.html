@@ -1,3 +1,5 @@
+{assign var="vmStatus" value=$status.status|default:'unknown'}
+{assign var="trafficPercent" value=$traffic.percent_value|default:'0'}
 <div class="cloudvm-page">
     {if $error_msg}
     <div class="cloudvm-alert">
@@ -8,86 +10,167 @@
 
     <section class="cloudvm-hero">
         <div class="cloudvm-hero-main">
-            <div class="cloudvm-power">
+            <div class="cloudvm-hero-icon">
                 <i class="fas fa-server"></i>
             </div>
-            <div>
-                <div class="cloudvm-eyebrow">CloudVM Instance</div>
+            <div class="cloudvm-hero-copy">
+                <div class="cloudvm-eyebrow">CloudVM Service</div>
                 <h2>{$name}</h2>
-                <div class="cloudvm-sub">
-                    <span>VMID {$vmid}</span>
-                    <span>{$status.status|default='unknown'}</span>
-                    <span>{$dedicatedip|default='-'}</span>
+                <div class="cloudvm-hero-meta">
+                    <span class="cloudvm-pill">VMID {$vmid|default='-'}</span>
+                    <span class="cloudvm-pill cloudvm-pill-status">{$vmStatus}</span>
+                    <span class="cloudvm-pill">{$network_mode|default='public'}</span>
                 </div>
             </div>
         </div>
-
-        {if $console_url}
-        <a href="{$console_url}" target="_blank" class="cloudvm-primary">
-            <i class="fas fa-desktop"></i>
-            <span>打开控制台</span>
-        </a>
-        {/if}
+        <div class="cloudvm-hero-actions">
+            {if $console_url}
+            <a href="{$console_url}" target="_blank" class="cloudvm-primary">
+                <i class="fas fa-desktop"></i>
+                <span>Open Console</span>
+            </a>
+            {/if}
+            {if $dedicatedip}
+            <button type="button" class="cloudvm-secondary" data-copy-text="{$dedicatedip|escape:'html'}">
+                <i class="fas fa-copy"></i>
+                <span>Copy IP</span>
+            </button>
+            {/if}
+        </div>
     </section>
 
-    <div class="cloudvm-grid">
+    <section class="cloudvm-stats">
+        <div class="cloudvm-stat">
+            <span class="cloudvm-stat-label">Status</span>
+            <strong class="cloudvm-stat-value">{$vmStatus}</strong>
+            <span class="cloudvm-stat-note">Current instance state</span>
+        </div>
+        <div class="cloudvm-stat">
+            <span class="cloudvm-stat-label">Public IP</span>
+            <strong class="cloudvm-stat-value">{$dedicatedip|default='-'}</strong>
+            <span class="cloudvm-stat-note">Customer access endpoint</span>
+        </div>
+        <div class="cloudvm-stat">
+            <span class="cloudvm-stat-label">Internal IP</span>
+            <strong class="cloudvm-stat-value">{$internal_ip|default='-'}</strong>
+            <span class="cloudvm-stat-note">Visible in NAT mode</span>
+        </div>
+        <div class="cloudvm-stat">
+            <span class="cloudvm-stat-label">Traffic Used</span>
+            <strong class="cloudvm-stat-value">{$traffic.used_gb_text|default='-'}</strong>
+            <span class="cloudvm-stat-note">Quota {$traffic.quota_gb_text|default='-'}</span>
+        </div>
+    </section>
+
+    <div class="cloudvm-layout">
         <section class="cloudvm-panel">
-            <div class="cloudvm-panel-title">
-                <i class="fas fa-key"></i>
-                <span>登录信息</span>
+            <div class="cloudvm-panel-head">
+                <div>
+                    <div class="cloudvm-panel-kicker">Access</div>
+                    <div class="cloudvm-panel-title">Login Details</div>
+                </div>
             </div>
-            <div class="cloudvm-kv">
-                <div>
-                    <span>用户名</span>
+            <div class="cloudvm-detail-grid">
+                <div class="cloudvm-detail-card">
+                    <span>Username</span>
                     <strong>{$username|default='-'}</strong>
+                    {if $username}
+                    <button type="button" class="cloudvm-inline-copy" data-copy-text="{$username|escape:'html'}">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                    {/if}
                 </div>
-                <div>
-                    <span>密码</span>
+                <div class="cloudvm-detail-card">
+                    <span>Password</span>
                     <strong class="cloudvm-code">{$password|default='-'}</strong>
+                    {if $password}
+                    <button type="button" class="cloudvm-inline-copy" data-copy-text="{$password|escape:'html'}">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                    {/if}
                 </div>
-                <div>
-                    <span>主 IP</span>
+                <div class="cloudvm-detail-card">
+                    <span>Public IP</span>
                     <strong>{$dedicatedip|default='-'}</strong>
+                    {if $dedicatedip}
+                    <button type="button" class="cloudvm-inline-copy" data-copy-text="{$dedicatedip|escape:'html'}">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                    {/if}
                 </div>
-                {if $internal_ip}
-                <div>
-                    <span>内网 IP</span>
-                    <strong>{$internal_ip}</strong>
+                <div class="cloudvm-detail-card">
+                    <span>Internal IP</span>
+                    <strong>{$internal_ip|default='-'}</strong>
+                    {if $internal_ip}
+                    <button type="button" class="cloudvm-inline-copy" data-copy-text="{$internal_ip|escape:'html'}">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                    {/if}
                 </div>
-                {/if}
+                <div class="cloudvm-detail-card">
+                    <span>Network Mode</span>
+                    <strong>{$network_mode|default='public'}</strong>
+                </div>
+                <div class="cloudvm-detail-card">
+                    <span>NAT SSH Port</span>
+                    <strong>{$status.nat.ssh_port|default='-'}</strong>
+                    {if $status.nat.ssh_port}
+                    <button type="button" class="cloudvm-inline-copy" data-copy-text="{$status.nat.ssh_port|escape:'html'}">
+                        <i class="fas fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                    {/if}
+                </div>
             </div>
         </section>
 
         <section class="cloudvm-panel">
-            <div class="cloudvm-panel-title">
-                <i class="fas fa-chart-line"></i>
-                <span>流量信息</span>
-            </div>
-            <div class="cloudvm-traffic-row">
+            <div class="cloudvm-panel-head">
                 <div>
-                    <span>额度</span>
+                    <div class="cloudvm-panel-kicker">Usage</div>
+                    <div class="cloudvm-panel-title">Traffic Overview</div>
+                </div>
+                <span class="cloudvm-badge">{$trafficPercent}%</span>
+            </div>
+            <div class="cloudvm-traffic-grid">
+                <div class="cloudvm-detail-card">
+                    <span>Quota</span>
                     <strong>{$traffic.quota_gb_text|default='-'}</strong>
                 </div>
-                <div>
-                    <span>已用</span>
+                <div class="cloudvm-detail-card">
+                    <span>Used</span>
                     <strong>{$traffic.used_gb_text|default='-'}</strong>
                 </div>
-                <div>
-                    <span>剩余</span>
+                <div class="cloudvm-detail-card">
+                    <span>Remaining</span>
                     <strong>{$traffic.remaining_gb_text|default='-'}</strong>
                 </div>
             </div>
             <div class="cloudvm-progress">
-                <div style="width: {$traffic.percent_value|default='0'}%;"></div>
+                <div style="width: {$trafficPercent}%;"></div>
+            </div>
+            <div class="cloudvm-progress-meta">
+                <span>Usage</span>
+                <span>{$trafficPercent}%</span>
             </div>
         </section>
     </div>
 
     {if $assignedips}
     <section class="cloudvm-panel">
-        <div class="cloudvm-panel-title">
-            <i class="fas fa-network-wired"></i>
-            <span>网络备注</span>
+        <div class="cloudvm-panel-head">
+            <div>
+                <div class="cloudvm-panel-kicker">Metadata</div>
+                <div class="cloudvm-panel-title">Network Notes</div>
+            </div>
+            <button type="button" class="cloudvm-secondary" data-copy-text="{$assignedips|escape:'html'}">
+                <i class="fas fa-copy"></i>
+                <span>Copy Notes</span>
+            </button>
         </div>
         <pre class="cloudvm-meta">{$assignedips}</pre>
     </section>
@@ -95,25 +178,27 @@
 
     {if $ips}
     <section class="cloudvm-panel">
-        <div class="cloudvm-panel-title">
-            <i class="fas fa-globe"></i>
-            <span>IP 绑定</span>
+        <div class="cloudvm-panel-head">
+            <div>
+                <div class="cloudvm-panel-kicker">Networking</div>
+                <div class="cloudvm-panel-title">IP Assignments</div>
+            </div>
         </div>
         <div class="cloudvm-table-wrap">
             <table class="cloudvm-table">
                 <thead>
                     <tr>
-                        <th>地址</th>
+                        <th>Address</th>
                         <th>CIDR</th>
-                        <th>网关</th>
-                        <th>状态</th>
-                        <th>备注</th>
+                        <th>Gateway</th>
+                        <th>Status</th>
+                        <th>Note</th>
                     </tr>
                 </thead>
                 <tbody>
                     {foreach $ips as $ip}
                     <tr>
-                        <td>{$ip.address|default='-'}</td>
+                        <td class="cloudvm-cell-main">{$ip.address|default='-'}</td>
                         <td>{$ip.cidr|default='-'}</td>
                         <td>{$ip.gateway|default='-'}</td>
                         <td><span class="cloudvm-badge">{$ip.status|default='-'}</span></td>
@@ -128,23 +213,25 @@
 
     {if $tasks}
     <section class="cloudvm-panel">
-        <div class="cloudvm-panel-title">
-            <i class="fas fa-list-check"></i>
-            <span>最近任务</span>
+        <div class="cloudvm-panel-head">
+            <div>
+                <div class="cloudvm-panel-kicker">Activity</div>
+                <div class="cloudvm-panel-title">Recent Tasks</div>
+            </div>
         </div>
         <div class="cloudvm-table-wrap">
             <table class="cloudvm-table">
                 <thead>
                     <tr>
-                        <th>动作</th>
-                        <th>状态</th>
-                        <th>时间</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Created</th>
                     </tr>
                 </thead>
                 <tbody>
                     {foreach $tasks as $task}
                     <tr>
-                        <td>{$task.action|default='-'}</td>
+                        <td class="cloudvm-cell-main">{$task.action|default='-'}</td>
                         <td><span class="cloudvm-badge">{$task.status|default='-'}</span></td>
                         <td>{$task.created_at|default='-'}</td>
                     </tr>
@@ -158,103 +245,225 @@
 
 <style>
 .cloudvm-page {
-    color: #182033;
+    --cloudvm-border: #d8e0ef;
+    --cloudvm-border-soft: #e8edf6;
+    --cloudvm-text: #182033;
+    --cloudvm-muted: #67748b;
+    --cloudvm-panel: #ffffff;
+    --cloudvm-surface: #f3f6fb;
+    --cloudvm-accent: #2156d8;
+    --cloudvm-accent-strong: #153a93;
+    --cloudvm-accent-soft: #e9f0ff;
+    --cloudvm-success: #0f9f6e;
+    --cloudvm-shadow: 0 20px 48px rgba(16, 24, 40, 0.08);
+    color: var(--cloudvm-text);
 }
 
 .cloudvm-alert {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
     border: 1px solid #fecaca;
     border-radius: 8px;
-    background: #fef2f2;
-    color: #991b1b;
+    background: #fff4f4;
+    color: #b42318;
 }
 
 .cloudvm-hero {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 18px;
-    padding: 22px 24px;
+    gap: 20px;
+    padding: 24px;
     margin-bottom: 18px;
+    border: 1px solid #dce6ff;
     border-radius: 8px;
-    background: linear-gradient(135deg, #176bff 0%, #12b7d8 100%);
+    background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.2), transparent 34%),
+        linear-gradient(135deg, #0f2c75 0%, #2156d8 55%, #1aa0c8 100%);
     color: #fff;
-    box-shadow: 0 14px 30px rgba(23, 107, 255, 0.18);
+    box-shadow: 0 20px 42px rgba(17, 52, 130, 0.22);
+}
+
+.cloudvm-hero-main,
+.cloudvm-hero-actions,
+.cloudvm-panel-head,
+.cloudvm-progress-meta {
+    display: flex;
+    align-items: center;
 }
 
 .cloudvm-hero-main {
-    display: flex;
-    align-items: center;
     gap: 16px;
     min-width: 0;
 }
 
-.cloudvm-power {
+.cloudvm-hero-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 48px;
-    height: 48px;
+    flex: 0 0 auto;
+    width: 56px;
+    height: 56px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.16);
+    font-size: 22px;
 }
 
-.cloudvm-eyebrow {
-    margin-bottom: 4px;
+.cloudvm-hero-copy {
+    min-width: 0;
+}
+
+.cloudvm-eyebrow,
+.cloudvm-panel-kicker,
+.cloudvm-stat-label {
+    color: inherit;
     font-size: 12px;
-    letter-spacing: 0.08em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    opacity: 0.78;
+}
+
+.cloudvm-eyebrow,
+.cloudvm-panel-kicker {
+    opacity: 0.72;
 }
 
 .cloudvm-hero h2 {
     margin: 0;
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1.25;
+    font-size: 26px;
+    line-height: 1.2;
+    word-break: break-word;
 }
 
-.cloudvm-sub {
+.cloudvm-hero-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 9px;
+    margin-top: 12px;
 }
 
-.cloudvm-sub span {
-    padding: 3px 9px;
+.cloudvm-pill,
+.cloudvm-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
     font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
-.cloudvm-primary {
+.cloudvm-pill {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.cloudvm-pill-status {
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.cloudvm-hero-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.cloudvm-primary,
+.cloudvm-secondary,
+.cloudvm-inline-copy {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-width: 124px;
-    padding: 10px 14px;
+    border: 0;
     border-radius: 8px;
-    background: #fff;
-    color: #176bff;
     font-weight: 700;
     text-decoration: none;
-    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.cloudvm-primary:hover {
-    color: #0f54c8;
+.cloudvm-primary,
+.cloudvm-secondary {
+    min-height: 40px;
+    padding: 0 14px;
+}
+
+.cloudvm-primary {
+    background: #fff;
+    color: var(--cloudvm-accent);
+    box-shadow: 0 10px 24px rgba(14, 25, 56, 0.14);
+}
+
+.cloudvm-secondary {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cloudvm-inline-copy {
+    align-self: flex-start;
+    min-height: 30px;
+    padding: 0 10px;
+    margin-top: 10px;
+    background: var(--cloudvm-accent-soft);
+    color: var(--cloudvm-accent);
+}
+
+.cloudvm-primary:hover,
+.cloudvm-secondary:hover,
+.cloudvm-inline-copy:hover {
     text-decoration: none;
+    transform: translateY(-1px);
 }
 
-.cloudvm-grid {
+.cloudvm-stats {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.cloudvm-stat,
+.cloudvm-panel {
+    border: 1px solid var(--cloudvm-border);
+    border-radius: 8px;
+    background: var(--cloudvm-panel);
+    box-shadow: var(--cloudvm-shadow);
+}
+
+.cloudvm-stat {
+    padding: 16px;
+    background:
+        linear-gradient(180deg, rgba(243, 246, 251, 0.88), rgba(255, 255, 255, 1));
+}
+
+.cloudvm-stat-label {
+    color: var(--cloudvm-muted);
+}
+
+.cloudvm-stat-value {
+    display: block;
+    margin-top: 10px;
+    font-size: 20px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.cloudvm-stat-note {
+    display: block;
+    margin-top: 8px;
+    color: var(--cloudvm-muted);
+    font-size: 12px;
+}
+
+.cloudvm-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -262,83 +471,100 @@
 .cloudvm-panel {
     margin-bottom: 16px;
     padding: 18px;
-    border: 1px solid #e7ebf3;
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.cloudvm-panel-head {
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
 }
 
 .cloudvm-panel-title {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin-bottom: 16px;
-    color: #1f2a44;
-    font-size: 15px;
+    color: var(--cloudvm-text);
+    font-size: 19px;
     font-weight: 700;
+    line-height: 1.2;
 }
 
-.cloudvm-panel-title i {
-    color: #176bff;
-}
-
-.cloudvm-kv,
-.cloudvm-traffic-row {
+.cloudvm-detail-grid,
+.cloudvm-traffic-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
 }
 
-.cloudvm-kv div,
-.cloudvm-traffic-row div {
-    padding: 12px;
-    border-radius: 8px;
-    background: #f7f9fc;
+.cloudvm-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.cloudvm-kv span,
-.cloudvm-traffic-row span {
-    display: block;
-    margin-bottom: 5px;
-    color: #69758c;
+.cloudvm-traffic-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cloudvm-detail-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 124px;
+    padding: 14px;
+    border: 1px solid var(--cloudvm-border-soft);
+    border-radius: 8px;
+    background: var(--cloudvm-surface);
+}
+
+.cloudvm-detail-card span {
+    color: var(--cloudvm-muted);
     font-size: 12px;
 }
 
-.cloudvm-kv strong,
-.cloudvm-traffic-row strong {
+.cloudvm-detail-card strong {
     display: block;
+    margin-top: 10px;
     overflow-wrap: anywhere;
-    color: #172033;
-    font-size: 14px;
-    font-weight: 700;
+    color: var(--cloudvm-text);
+    font-size: 16px;
+    line-height: 1.35;
 }
 
 .cloudvm-code {
     font-family: Consolas, Monaco, monospace;
 }
 
+.cloudvm-badge {
+    background: #edf8f3;
+    color: var(--cloudvm-success);
+}
+
 .cloudvm-progress {
     overflow: hidden;
-    height: 8px;
-    margin-top: 14px;
+    height: 10px;
+    margin-top: 16px;
     border-radius: 999px;
-    background: #eef2f7;
+    background: #e8edf6;
 }
 
 .cloudvm-progress div {
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #16c784, #176bff);
+    background: linear-gradient(90deg, #1aa0c8 0%, #2156d8 100%);
+}
+
+.cloudvm-progress-meta {
+    justify-content: space-between;
+    margin-top: 10px;
+    color: var(--cloudvm-muted);
+    font-size: 12px;
 }
 
 .cloudvm-meta {
     margin: 0;
-    padding: 13px;
+    padding: 15px;
+    border: 1px solid var(--cloudvm-border-soft);
     border-radius: 8px;
-    background: #f7f9fc;
+    background: #f8fafc;
     color: #334155;
     font-size: 13px;
+    line-height: 1.6;
     white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .cloudvm-table-wrap {
@@ -347,58 +573,101 @@
 
 .cloudvm-table {
     width: 100%;
-    margin: 0;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
 .cloudvm-table th {
-    padding: 10px 12px;
-    border-bottom: 1px solid #e7ebf3;
-    color: #69758c;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--cloudvm-border);
+    color: var(--cloudvm-muted);
     font-size: 12px;
     font-weight: 700;
     text-align: left;
-    background: #f7f9fc;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .cloudvm-table td {
-    padding: 11px 12px;
-    border-bottom: 1px solid #eef2f7;
-    color: #1f2a44;
+    padding: 14px;
+    border-bottom: 1px solid var(--cloudvm-border-soft);
+    color: var(--cloudvm-text);
     font-size: 13px;
+    vertical-align: middle;
 }
 
 .cloudvm-table tr:last-child td {
     border-bottom: 0;
 }
 
-.cloudvm-badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 22px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: #eef7ff;
-    color: #176bff;
-    font-size: 12px;
+.cloudvm-cell-main {
     font-weight: 700;
 }
 
-@media (max-width: 992px) {
-    .cloudvm-grid {
-        grid-template-columns: 1fr;
+@media (max-width: 1100px) {
+    .cloudvm-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .cloudvm-hero {
-        align-items: flex-start;
-        flex-direction: column;
+    .cloudvm-layout {
+        grid-template-columns: 1fr;
     }
 }
 
-@media (max-width: 640px) {
-    .cloudvm-kv,
-    .cloudvm-traffic-row {
+@media (max-width: 760px) {
+    .cloudvm-hero,
+    .cloudvm-panel-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .cloudvm-hero-actions {
+        justify-content: flex-start;
+    }
+
+    .cloudvm-stats,
+    .cloudvm-detail-grid,
+    .cloudvm-traffic-grid {
         grid-template-columns: 1fr;
+    }
+
+    .cloudvm-panel {
+        padding: 16px;
+    }
+
+    .cloudvm-table th,
+    .cloudvm-table td {
+        padding: 12px 10px;
     }
 }
 </style>
+
+<script>
+(function () {
+    var buttons = document.querySelectorAll('.cloudvm-page [data-copy-text]');
+    if (!buttons.length || !navigator.clipboard) {
+        return;
+    }
+    for (var i = 0; i < buttons.length; i++) {
+        buttons[i].addEventListener('click', function () {
+            var button = this;
+            var text = button.getAttribute('data-copy-text') || '';
+            navigator.clipboard.writeText(text).then(function () {
+                var label = button.querySelector('span');
+                if (!label) {
+                    return;
+                }
+                var original = button.getAttribute('data-copy-label');
+                if (!original) {
+                    original = label.textContent;
+                    button.setAttribute('data-copy-label', original);
+                }
+                label.textContent = 'Copied';
+                window.setTimeout(function () {
+                    label.textContent = original;
+                }, 1400);
+            });
+        });
+    }
+})();
+</script>
