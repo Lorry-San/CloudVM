@@ -17,6 +17,7 @@ DEFAULT_NET_FIREWALL="${DEFAULT_NET_FIREWALL:-1}"
 DEFAULT_AGENT="${DEFAULT_AGENT:-1}"
 DEFAULT_IOTHREAD="${DEFAULT_IOTHREAD:-1}"
 DEFAULT_CIUSER="${DEFAULT_CIUSER:-root}"
+AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
 
 info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -31,8 +32,37 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
+is_root() {
+  [[ "${EUID:-$(id -u)}" -eq 0 ]]
+}
+
+install_packages() {
+  [[ "${AUTO_INSTALL_DEPS}" -eq 1 ]] || return 1
+  is_root || die "Missing dependency. Re-run as root or install manually: $*"
+  command -v apt-get >/dev/null 2>&1 || die "Missing dependency and apt-get is not available: $*"
+  info "Installing missing dependencies: $*"
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
+ensure_cmd() {
+  local cmd="$1"
+  local package="${2:-$1}"
+  command -v "$cmd" >/dev/null 2>&1 && return
+  install_packages "$package" || die "Missing command: ${cmd}. Install package manually: ${package}"
+  command -v "$cmd" >/dev/null 2>&1 || die "Missing command after install: ${cmd}"
+}
+
+ensure_download_tool() {
+  if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
+    return
+  fi
+  install_packages curl ca-certificates || die "Missing command: curl or wget"
+}
+
 download() {
   local url="$1" output="$2"
+  ensure_download_tool
   if command -v curl >/dev/null 2>&1; then
     curl -fL --connect-timeout 15 --retry 3 --retry-delay 2 -o "$output" "$url"
   else
@@ -125,7 +155,7 @@ customize_image() {
   fi
 
   if [[ "${#args[@]}" -gt 0 ]]; then
-    need_cmd virt-customize
+    ensure_cmd virt-customize libguestfs-tools
     info "Customizing ${image_path}"
     virt-customize -a "${image_path}" "${args[@]}"
   fi
@@ -243,10 +273,9 @@ main() {
 
   require_root
   need_cmd qm
-  need_cmd qemu-img
-  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    die "Missing command: curl or wget"
-  fi
+  ensure_cmd qemu-img qemu-utils
+  ensure_cmd python3 python3
+  ensure_download_tool
   mkdir -p "${OUTPUT_DIR}"
 
   pick_image

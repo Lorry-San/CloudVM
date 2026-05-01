@@ -211,6 +211,8 @@ bash scripts/download-cloud-image.sh debian-12 \
 
 - Debian 使用官方 `generic-amd64.qcow2`
 - 可选离线修改 SSH / root / cloud-init
+- 缺少 `curl` / `wget` / `virt-customize` 时会自动用 `apt-get` 安装依赖；设置 `AUTO_INSTALL_DEPS=0` 或传 `--no-install-deps` 可关闭
+- 可用 `--motd-file <path>` 写入镜像内 `/etc/motd`
 
 ### 2. 交互式导入模板
 
@@ -234,6 +236,7 @@ bash scripts/image-import.sh
 - 不支持块存储，如 `local-lvm`
 - `local` 直接按 `/var/lib/vz` 处理
 - 不使用 `qm importdisk`
+- 缺少 `curl` / `wget` / `qemu-img` / `python3` / `virt-customize` 时会自动用 `apt-get` 安装依赖；`qm` 仍要求在 Proxmox 节点上已有
 
 ## API 概览
 

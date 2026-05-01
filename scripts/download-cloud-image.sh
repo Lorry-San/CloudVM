@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-IMAGE_NAME="${1:-debian-12}"
-shift || true
+IMAGE_NAME="debian-12"
+if [[ $# -gt 0 && "${1:0:1}" != "-" ]]; then
+  IMAGE_NAME="$1"
+  shift
+fi
 
 OUTPUT_DIR="${OUTPUT_DIR:-/var/lib/vz/template/qemu}"
 OUTPUT_FILE=""
@@ -11,6 +14,8 @@ ENABLE_ROOT_LOGIN=0
 ENABLE_QEMU_AGENT=0
 ROOT_PASSWORD=""
 CUSTOMIZE=1
+MOTD_FILE=""
+AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
 
 info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -35,18 +40,46 @@ Options:
   --enable-root-login         Enable root SSH login
   --set-root-password <pass>  Set root password inside image
   --enable-qemu-agent         Install qemu-guest-agent in the image
+  --motd-file <path>          Replace /etc/motd with content from local file
   --no-customize              Download only, skip virt-customize
+  --no-install-deps           Do not install missing host dependencies
   -h, --help                  Show this help
 EOF
+}
+
+require_arg() {
+  [[ $# -ge 2 && -n "${2:-}" && "${2:0:1}" != "-" ]] || die "Missing value for ${1}"
+}
+
+is_root() {
+  [[ "${EUID:-$(id -u)}" -eq 0 ]]
+}
+
+install_packages() {
+  [[ "${AUTO_INSTALL_DEPS}" -eq 1 ]] || return 1
+  is_root || die "Missing dependency. Re-run as root or install manually: $*"
+  command -v apt-get >/dev/null 2>&1 || die "Missing dependency and apt-get is not available: $*"
+  info "Installing missing dependencies: $*"
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
+ensure_download_tool() {
+  if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
+    return
+  fi
+  install_packages curl ca-certificates || die "Need curl or wget"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-dir)
+      require_arg "$@"
       OUTPUT_DIR="$2"
       shift 2
       ;;
     --output-file)
+      require_arg "$@"
       OUTPUT_FILE="$2"
       shift 2
       ;;
@@ -59,6 +92,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --set-root-password)
+      require_arg "$@"
       ROOT_PASSWORD="$2"
       shift 2
       ;;
@@ -66,8 +100,17 @@ while [[ $# -gt 0 ]]; do
       ENABLE_QEMU_AGENT=1
       shift
       ;;
+    --motd-file)
+      require_arg "$@"
+      MOTD_FILE="$2"
+      shift 2
+      ;;
     --no-customize)
       CUSTOMIZE=0
+      shift
+      ;;
+    --no-install-deps)
+      AUTO_INSTALL_DEPS=0
       shift
       ;;
     -h|--help)
@@ -110,6 +153,7 @@ mkdir -p "${OUTPUT_DIR}"
 IMAGE_PATH="${OUTPUT_DIR%/}/${OUTPUT_FILE}"
 
 download() {
+  ensure_download_tool
   if command -v curl >/dev/null 2>&1; then
     curl -fL --connect-timeout 15 --retry 3 --retry-delay 2 -o "${IMAGE_PATH}" "${IMAGE_URL}"
   elif command -v wget >/dev/null 2>&1; then
@@ -120,7 +164,8 @@ download() {
 }
 
 require_virt_customize() {
-  command -v virt-customize >/dev/null 2>&1 || die "virt-customize not found. Install libguestfs-tools first."
+  command -v virt-customize >/dev/null 2>&1 && return
+  install_packages libguestfs-tools || die "virt-customize not found. Install libguestfs-tools first."
 }
 
 build_customize_args() {
@@ -144,6 +189,12 @@ build_customize_args() {
   if [[ "${ENABLE_QEMU_AGENT}" -eq 1 ]]; then
     CUSTOMIZE_ARGS+=(--install qemu-guest-agent)
     CUSTOMIZE_ARGS+=(--run-command "systemctl enable qemu-guest-agent || true")
+  fi
+
+  if [[ -n "${MOTD_FILE}" ]]; then
+    [[ -f "${MOTD_FILE}" ]] || die "MOTD file not found: ${MOTD_FILE}"
+    CUSTOMIZE_ARGS+=(--upload "${MOTD_FILE}:/etc/motd")
+    CUSTOMIZE_ARGS+=(--run-command "chmod 644 /etc/motd")
   fi
 }
 
@@ -171,7 +222,7 @@ info "Downloading ${IMAGE_NAME} from official cloud image source"
 download
 
 if [[ "${CUSTOMIZE}" -eq 1 ]]; then
-  if [[ "${ENABLE_PASSWORD_AUTH}" -eq 1 || "${ENABLE_ROOT_LOGIN}" -eq 1 || -n "${ROOT_PASSWORD}" || "${ENABLE_QEMU_AGENT}" -eq 1 ]]; then
+  if [[ "${ENABLE_PASSWORD_AUTH}" -eq 1 || "${ENABLE_ROOT_LOGIN}" -eq 1 || -n "${ROOT_PASSWORD}" || "${ENABLE_QEMU_AGENT}" -eq 1 || -n "${MOTD_FILE}" ]]; then
     require_virt_customize
     build_customize_args
     info "Customizing image ${IMAGE_PATH}"
