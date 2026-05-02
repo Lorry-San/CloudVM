@@ -175,11 +175,13 @@ def ingress_match_args(settings: Settings) -> list[list[str]]:
 def dnat_delete_commands(
     settings: Settings,
     protocol: str,
-    port: int,
+    port_start: int,
+    port_end: int,
     destination: str,
 ) -> list[list[str]]:
+    dport = str(port_start) if port_start == port_end else f"{port_start}:{port_end}"
     return [
-        ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", *match, "-p", protocol, "--dport", str(port), "-j", "DNAT", "--to-destination", destination]
+        ["iptables", "-w", "-t", "nat", "-D", "PREROUTING", *match, "-p", protocol, "--dport", dport, "-j", "DNAT", "--to-destination", destination]
         for match in ingress_match_args(settings)
     ]
 
@@ -187,7 +189,8 @@ def dnat_delete_commands(
 def dnat_ensure_commands(
     settings: Settings,
     protocol: str,
-    port: int,
+    port_start: int,
+    port_end: int,
     destination: str,
 ) -> list[tuple[list[str], list[str]]]:
     return [
@@ -195,8 +198,22 @@ def dnat_ensure_commands(
             ["iptables", "-w", "-t", "nat", "-C", *delete_cmd[5:]],
             ["iptables", "-w", "-t", "nat", "-A", *delete_cmd[5:]],
         )
-        for delete_cmd in dnat_delete_commands(settings, protocol, port, destination)
+        for delete_cmd in dnat_delete_commands(settings, protocol, port_start, port_end, destination)
     ]
+
+
+def compact_dnat_specs(lease: NatLease) -> list[tuple[str, int, int, str]]:
+    specs = [
+        ("tcp", lease.ssh_port, lease.ssh_port, f"{lease.address}:22"),
+        ("udp", lease.ssh_port, lease.ssh_port, f"{lease.address}:22"),
+    ]
+    if lease.port_end > lease.ssh_port:
+        port_start = lease.ssh_port + 1
+        port_end = lease.port_end
+        destination = f"{lease.address}:{port_start}-{port_end}"
+        specs.append(("tcp", port_start, port_end, destination))
+        specs.append(("udp", port_start, port_end, destination))
+    return specs
 
 
 def stale_dnat_delete_commands(
@@ -278,28 +295,22 @@ async def ensure_nat_ready(settings: Settings) -> None:
         ["iptables", "-w", "-t", "nat", "-C", "POSTROUTING", "-s", str(network), "-o", uplink, "-j", "MASQUERADE"],
         ["iptables", "-w", "-t", "nat", "-A", "POSTROUTING", "-s", str(network), "-o", uplink, "-j", "MASQUERADE"],
     )
+    await ensure_iptables_rule(
+        ["iptables", "-w", "-t", "nat", "-C", "POSTROUTING", "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "DNAT", "-j", "SNAT", "--to-source", str(host_ip)],
+        ["iptables", "-w", "-t", "nat", "-A", "POSTROUTING", "-o", bridge, "-d", str(network), "-m", "conntrack", "--ctstate", "DNAT", "-j", "SNAT", "--to-source", str(host_ip)],
+    )
 
 
 async def ensure_nat_rules(settings: Settings, lease: NatLease) -> None:
     await ensure_nat_ready(settings)
-    for check_cmd, add_cmd in dnat_ensure_commands(settings, "tcp", lease.ssh_port, f"{lease.address}:22"):
-        await ensure_iptables_rule(check_cmd, add_cmd)
-    for port in range(lease.ssh_port + 1, lease.port_end + 1):
-        destination = f"{lease.address}:{port}"
-        for check_cmd, add_cmd in dnat_ensure_commands(settings, "tcp", port, destination):
-            await ensure_iptables_rule(check_cmd, add_cmd)
-        for check_cmd, add_cmd in dnat_ensure_commands(settings, "udp", port, destination):
+    for protocol, port_start, port_end, destination in compact_dnat_specs(lease):
+        for check_cmd, add_cmd in dnat_ensure_commands(settings, protocol, port_start, port_end, destination):
             await ensure_iptables_rule(check_cmd, add_cmd)
 
 
 async def remove_nat_rules(settings: Settings, lease: NatLease) -> None:
-    for command in dnat_delete_commands(settings, "tcp", lease.ssh_port, f"{lease.address}:22"):
-        await delete_iptables_rule(command)
-    for port in range(lease.ssh_port + 1, lease.port_end + 1):
-        destination = f"{lease.address}:{port}"
-        for command in dnat_delete_commands(settings, "tcp", port, destination):
-            await delete_iptables_rule(command)
-        for command in dnat_delete_commands(settings, "udp", port, destination):
+    for protocol, port_start, port_end, destination in compact_dnat_specs(lease):
+        for command in dnat_delete_commands(settings, protocol, port_start, port_end, destination):
             await delete_iptables_rule(command)
 
 
