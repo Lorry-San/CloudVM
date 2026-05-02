@@ -35,6 +35,8 @@ def nat_host_address(settings: Settings) -> IPv4Address:
 
 
 def external_host(settings: Settings) -> str:
+    if settings.nat_return_ip:
+        return settings.nat_return_ip.strip()
     if settings.public_base_url:
         parsed = urlparse(settings.public_base_url)
         if parsed.hostname:

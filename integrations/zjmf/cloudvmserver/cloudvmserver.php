@@ -253,7 +253,7 @@ function cloudvmserver_NatReturnIp($params, $source = [])
     $cfg = $params['configoptions'] ?? [];
     $ip = trim((string)cloudvmserver_Option($cfg, ['nat_return_ip', 'nat_public_ip', 'return_ip', 'NAT返回IP'], ''));
     if ($ip === '' && is_array($source)) {
-        $ip = trim((string)($source['external_host'] ?? $source['public_ip'] ?? ''));
+        $ip = trim((string)($source['nat_return_ip'] ?? $source['external_host'] ?? $source['public_ip'] ?? ''));
     }
     if ($ip === '') $ip = trim((string)($params['server_ip'] ?? ''));
     return $ip;
