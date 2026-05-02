@@ -8,9 +8,11 @@ BRANCH="${BRANCH:-main}"
 PANEL_PORT="${PANEL_PORT:-8080}"
 SERVICE_NAME="${SERVICE_NAME:-cloudvm}"
 GITHUB_PROXY="${GITHUB_PROXY:-https://hk.gh-proxy.org}"
-DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://mirrors.aliyun.com/debian}"
-DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}"
-PVE_MIRROR="${PVE_MIRROR:-http://download.proxmox.com/debian/pve}"
+DEBIAN_MIRROR="${DEBIAN_MIRROR:-}"
+DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-}"
+PVE_MIRROR="${PVE_MIRROR:-}"
+APT_REGION="${APT_REGION:-auto}"
+USE_GITHUB_PROXY="${USE_GITHUB_PROXY:-auto}"
 PVE_HOSTNAME="${PVE_HOSTNAME:-pve01}"
 PVE_FQDN="${PVE_FQDN:-${PVE_HOSTNAME}.local}"
 PVE_TOKEN_USER="${PVE_TOKEN_USER:-root@pam}"
@@ -51,7 +53,79 @@ download_file() {
 
 github_proxy_url() {
   local url="$1"
-  echo "${GITHUB_PROXY%/}/${url}"
+  if should_use_github_proxy; then
+    echo "${GITHUB_PROXY%/}/${url}"
+  else
+    echo "${url}"
+  fi
+}
+
+detect_region() {
+  local country=""
+  if [[ "${APT_REGION}" != "auto" ]]; then
+    printf '%s\n' "${APT_REGION}"
+    return 0
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    country="$(curl -fsSL --connect-timeout 3 --max-time 5 https://ipinfo.io/country 2>/dev/null | tr -d '\r' | tr '[:lower:]' '[:upper:]')"
+  elif command -v wget >/dev/null 2>&1; then
+    country="$(wget -qO- --timeout=5 https://ipinfo.io/country 2>/dev/null | tr -d '\r' | tr '[:lower:]' '[:upper:]')"
+  fi
+
+  if [[ "${country}" == "CN" ]]; then
+    printf '%s\n' "cn"
+  else
+    printf '%s\n' "global"
+  fi
+}
+
+configure_mirrors_by_region() {
+  local region
+  region="$(detect_region)"
+
+  if [[ -z "${DEBIAN_MIRROR}" ]]; then
+    if [[ "${region}" == "cn" ]]; then
+      DEBIAN_MIRROR="https://mirrors.aliyun.com/debian"
+    else
+      DEBIAN_MIRROR="https://deb.debian.org/debian"
+    fi
+  fi
+
+  if [[ -z "${DEBIAN_SECURITY_MIRROR}" ]]; then
+    if [[ "${region}" == "cn" ]]; then
+      DEBIAN_SECURITY_MIRROR="https://mirrors.aliyun.com/debian-security"
+    else
+      DEBIAN_SECURITY_MIRROR="https://security.debian.org/debian-security"
+    fi
+  fi
+
+  if [[ -z "${PVE_MIRROR}" ]]; then
+    if [[ "${region}" == "cn" ]]; then
+      PVE_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"
+    else
+      PVE_MIRROR="http://download.proxmox.com/debian/pve"
+    fi
+  fi
+
+  export DEBIAN_MIRROR DEBIAN_SECURITY_MIRROR PVE_MIRROR
+  info "APT region: ${region}"
+  info "Debian mirror: ${DEBIAN_MIRROR}"
+  info "Debian security mirror: ${DEBIAN_SECURITY_MIRROR}"
+  info "Proxmox mirror: ${PVE_MIRROR}"
+}
+
+should_use_github_proxy() {
+  case "${USE_GITHUB_PROXY}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+
+  [[ "$(detect_region)" == "cn" ]]
 }
 
 configure_hostname_and_hosts() {
@@ -75,7 +149,8 @@ EOF
 }
 
 configure_apt_sources() {
-  info "Configuring Debian 13 sources (Aliyun, deb822)"
+  configure_mirrors_by_region
+  info "Configuring Debian 13 sources"
   mkdir -p /etc/apt/sources.list.d
   rm -f /etc/apt/sources.list
   cat >/etc/apt/sources.list.d/debian.sources <<EOF
@@ -94,6 +169,7 @@ EOF
 }
 
 configure_pve_repo() {
+  configure_mirrors_by_region
   info "Configuring Proxmox VE 9 repository"
   mkdir -p /usr/share/keyrings
   download_file \
