@@ -57,6 +57,8 @@ class VmActionResponse(BaseModel):
     start_task: str | None = None
     allocated_ip: str | None = None
     nat_ip: str | None = None
+    nat_return_ip: str | None = None
+    external_host: str | None = None
     ssh_port: int | None = None
     port_range_start: int | None = None
     port_range_end: int | None = None

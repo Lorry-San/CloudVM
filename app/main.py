@@ -894,6 +894,8 @@ async def create_vm(
             start_task=start_task,
             allocated_ip=lease.address if lease else None,
             nat_ip=nat_lease.address if nat_lease else None,
+            nat_return_ip=nat_lease.external_host if nat_lease else None,
+            external_host=nat_lease.external_host if nat_lease else None,
             ssh_port=nat_lease.ssh_port if nat_lease else None,
             port_range_start=nat_lease.port_start if nat_lease else None,
             port_range_end=nat_lease.port_end if nat_lease else None,
@@ -1302,6 +1304,8 @@ async def delete_vm(
         task=task,
         released_ip=released.address if released else None,
         nat_ip=nat_lease.address if nat_lease else None,
+        nat_return_ip=nat_lease.external_host if nat_lease else None,
+        external_host=nat_lease.external_host if nat_lease else None,
         ssh_port=nat_lease.ssh_port if nat_lease else None,
         status="deleting" if task else "deleted",
     )

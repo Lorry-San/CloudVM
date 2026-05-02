@@ -60,7 +60,7 @@ def port_block_for_ip(settings: Settings, address: str) -> tuple[int, int, int]:
     return start, end, start
 
 
-def _row_to_nat_lease(row) -> NatLease:
+def _row_to_nat_lease(settings: Settings, row) -> NatLease:
     return NatLease(
         vmid=row["vmid"],
         address=row["address"],
@@ -69,7 +69,7 @@ def _row_to_nat_lease(row) -> NatLease:
         nameserver=row["nameserver"],
         bridge=row["bridge"],
         host_ip=row["host_ip"],
-        external_host=row["external_host"],
+        external_host=external_host(settings) or row["external_host"],
         port_start=row["port_start"],
         port_end=row["port_end"],
         ssh_port=row["ssh_port"],
@@ -83,13 +83,13 @@ def get_nat_lease(settings: Settings, vmid: int) -> NatLease | None:
             "SELECT * FROM nat_leases WHERE vmid = ?",
             (vmid,),
         ).fetchone()
-    return _row_to_nat_lease(row) if row else None
+    return _row_to_nat_lease(settings, row) if row else None
 
 
 def list_nat_leases(settings: Settings) -> list[NatLease]:
     with connect_db(settings) as conn:
         rows = conn.execute("SELECT * FROM nat_leases ORDER BY address").fetchall()
-    return [_row_to_nat_lease(row) for row in rows]
+    return [_row_to_nat_lease(settings, row) for row in rows]
 
 
 def allocate_nat_lease(settings: Settings, vmid: int) -> NatLease:
@@ -139,7 +139,7 @@ def allocate_nat_lease(settings: Settings, vmid: int) -> NatLease:
             ),
         )
         row = conn.execute("SELECT * FROM nat_leases WHERE vmid = ?", (vmid,)).fetchone()
-    return _row_to_nat_lease(row)
+    return _row_to_nat_lease(settings, row)
 
 
 def release_nat_lease(settings: Settings, vmid: int) -> NatLease | None:
