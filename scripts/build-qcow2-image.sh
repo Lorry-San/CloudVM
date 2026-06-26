@@ -3,14 +3,8 @@ set -Eeuo pipefail
 
 # Interactive qcow2/cloud-image builder.
 #
-# Required tools:
-#   bash, curl, qemu-img, virt-customize
-#
-# Debian/Ubuntu dependencies:
-#   apt-get install -y curl qemu-utils libguestfs-tools
-#
-# RHEL/CentOS/Rocky/Alma dependencies:
-#   dnf install -y curl qemu-img libguestfs-tools-c
+# Required tools are installed automatically on supported builders.
+# Set AUTO_INSTALL_DEPS=0 to only check dependencies.
 #
 # Usage:
 #   ./build-qcow2-image.sh
@@ -32,6 +26,7 @@ DOWNLOAD_NAME="${DOWNLOAD_NAME:-base-image}"
 HOSTNAME="${HOSTNAME:-cloud-vm}"
 TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-qemu-guest-agent,curl,wget,vim,htop,ca-certificates,cloud-init}"
+AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
 
 BUILD_BRAND="${BUILD_BRAND:-LightCone Cloud}"
 BUILD_TIME_UTC="${BUILD_TIME_UTC:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
@@ -73,6 +68,60 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+run_as_root() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    "$@"
+  elif has_cmd sudo; then
+    sudo "$@"
+  else
+    die "root permission is required to install dependencies; rerun as root or install sudo"
+  fi
+}
+
+missing_runtime_commands() {
+  local missing=()
+  has_cmd curl || missing+=("curl")
+  has_cmd qemu-img || missing+=("qemu-img")
+  has_cmd virt-customize || missing+=("virt-customize")
+  has_cmd xz || missing+=("xz")
+  ((${#missing[@]} == 0)) || printf '%s\n' "${missing[@]}"
+}
+
+install_dependencies() {
+  local os_id="" os_like=""
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    os_id="${ID:-}"
+    os_like="${ID_LIKE:-}"
+  fi
+
+  if has_cmd apt-get; then
+    log "installing dependencies with apt-get"
+    run_as_root apt-get update
+    run_as_root apt-get install -y curl qemu-utils libguestfs-tools xz-utils
+  elif has_cmd dnf; then
+    log "installing dependencies with dnf"
+    run_as_root dnf install -y curl qemu-img libguestfs-tools-c xz
+  elif has_cmd yum; then
+    log "installing dependencies with yum"
+    run_as_root yum install -y curl qemu-img libguestfs-tools-c xz
+  elif has_cmd zypper; then
+    log "installing dependencies with zypper"
+    run_as_root zypper --non-interactive install curl qemu-tools libguestfs-tools xz
+  elif has_cmd pacman; then
+    log "installing dependencies with pacman"
+    run_as_root pacman -Sy --needed --noconfirm curl qemu-img libguestfs xz
+  else
+    die "unsupported builder OS (${os_id:-unknown}${os_like:+, like: $os_like}); install curl, qemu-img, virt-customize, and xz manually"
+  fi
 }
 
 trim_slashes() {
@@ -249,6 +298,18 @@ resolve_paths() {
 }
 
 check_dependencies() {
+  local missing
+  missing="$(missing_runtime_commands || true)"
+  if [[ -n "$missing" ]]; then
+    if [[ "$AUTO_INSTALL_DEPS" == "1" ]]; then
+      log "missing dependencies: $(printf '%s' "$missing" | paste -sd ',' -)"
+      install_dependencies
+    else
+      printf 'Missing dependencies:\n%s\n' "$missing" >&2
+      die "install dependencies manually or set AUTO_INSTALL_DEPS=1"
+    fi
+  fi
+
   need_cmd curl
   need_cmd qemu-img
   need_cmd virt-customize
