@@ -27,6 +27,10 @@ HOSTNAME="${HOSTNAME:-cloud-vm}"
 TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-qemu-guest-agent,curl,wget,vim,htop,ca-certificates,cloud-init}"
 AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
+GUEST_APT_MIRROR="${GUEST_APT_MIRROR:-ustc}" # ustc, official, or none
+DEBIAN_APT_MIRROR="${DEBIAN_APT_MIRROR:-https://mirrors.ustc.edu.cn/debian}"
+DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-https://mirrors.ustc.edu.cn/debian-security}"
+UBUNTU_APT_MIRROR="${UBUNTU_APT_MIRROR:-https://mirrors.ustc.edu.cn/ubuntu}"
 
 BUILD_BRAND="${BUILD_BRAND:-LightCone Cloud}"
 BUILD_TIME_UTC="${BUILD_TIME_UTC:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
@@ -39,6 +43,7 @@ LIBGUESTFS_BACKEND="${LIBGUESTFS_BACKEND:-direct}"
 RAW_IMAGE=""
 OUTPUT_IMAGE=""
 MOTD_SNIPPET=""
+APT_MIRROR_SCRIPT=""
 
 MIRROR_NAMES=(
   "Debian official cloud latest"
@@ -296,6 +301,7 @@ resolve_paths() {
   RAW_IMAGE="${WORK_DIR}/${base_name}"
   OUTPUT_IMAGE="${OUTPUT_DIR}/${IMAGE_NAME}"
   MOTD_SNIPPET="${WORK_DIR}/99-image-build-motd"
+  APT_MIRROR_SCRIPT="${WORK_DIR}/setup-guest-apt-mirror.sh"
 
   case "$OUTPUT_IMAGE" in
     /root/*)
@@ -375,11 +381,69 @@ Build time: ${BUILD_TIME_UTC}.
 EOF
 }
 
+create_apt_mirror_script() {
+  cat >"$APT_MIRROR_SCRIPT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode="${GUEST_APT_MIRROR}"
+debian_mirror="${DEBIAN_APT_MIRROR}"
+debian_security_mirror="${DEBIAN_SECURITY_MIRROR}"
+ubuntu_mirror="${UBUNTU_APT_MIRROR}"
+
+[[ "\$mode" != "none" ]] || exit 0
+[[ -x /usr/bin/apt-get || -x /bin/apt-get ]] || exit 0
+[[ -r /etc/os-release ]] || exit 0
+
+. /etc/os-release
+codename="\${VERSION_CODENAME:-\${UBUNTU_CODENAME:-}}"
+[[ -n "\$codename" ]] || exit 0
+
+mkdir -p /etc/apt/sources.list.d /etc/apt/sources.list.d.disabled
+find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*.list' -o -name '*.sources' \\) \\
+  -exec mv -f {} /etc/apt/sources.list.d.disabled/ \\; 2>/dev/null || true
+
+case "\${ID:-}" in
+  debian)
+    if [[ "\$mode" == "official" ]]; then
+      debian_mirror="https://deb.debian.org/debian"
+      debian_security_mirror="https://deb.debian.org/debian-security"
+    fi
+    cat >/etc/apt/sources.list <<APT
+deb \${debian_mirror} \${codename} main contrib non-free non-free-firmware
+deb \${debian_mirror} \${codename}-updates main contrib non-free non-free-firmware
+deb \${debian_mirror} \${codename}-backports main contrib non-free non-free-firmware
+deb \${debian_security_mirror} \${codename}-security main contrib non-free non-free-firmware
+APT
+    ;;
+  ubuntu)
+    if [[ "\$mode" == "official" ]]; then
+      ubuntu_mirror="https://archive.ubuntu.com/ubuntu"
+    fi
+    cat >/etc/apt/sources.list <<APT
+deb \${ubuntu_mirror} \${codename} main restricted universe multiverse
+deb \${ubuntu_mirror} \${codename}-updates main restricted universe multiverse
+deb \${ubuntu_mirror} \${codename}-backports main restricted universe multiverse
+deb \${ubuntu_mirror} \${codename}-security main restricted universe multiverse
+APT
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EOF
+  chmod +x "$APT_MIRROR_SCRIPT"
+}
+
 customize_image() {
   local args=(
     -a "$OUTPUT_IMAGE"
     --hostname "$HOSTNAME"
     --timezone "$TIMEZONE"
+    --run "$APT_MIRROR_SCRIPT"
     --install "$INSTALL_PACKAGES"
     --run-command "systemctl enable qemu-guest-agent 2>/dev/null || true"
     --run-command "systemctl enable cloud-init 2>/dev/null || true"
@@ -476,6 +540,7 @@ show_config() {
   printf '  Build time:    %s\n' "$BUILD_TIME_UTC"
   printf '  Root SSH pass: %s\n' "$ENABLE_ROOT_SSH_PASSWORD_LOGIN"
   printf '  Guestfs:       %s\n' "$LIBGUESTFS_BACKEND"
+  printf '  Guest apt:     %s\n' "$GUEST_APT_MIRROR"
   printf '\n'
 }
 
@@ -493,6 +558,7 @@ main() {
   verify_sha256 "$RAW_IMAGE" "$IMAGE_SHA256"
   copy_base_image
   create_motd_snippet
+  create_apt_mirror_script
   customize_image
   run_sysprep
   show_result
