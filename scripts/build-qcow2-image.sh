@@ -20,7 +20,7 @@ IMAGE_SHA256="${IMAGE_SHA256:-}"
 IMAGE_NAME="${IMAGE_NAME:-}"
 
 WORK_DIR="${WORK_DIR:-./work/qcow2-build}"
-OUTPUT_DIR="${OUTPUT_DIR:-./dist}"
+OUTPUT_DIR="${OUTPUT_DIR:-/var/tmp/qcow2-build/dist}"
 DOWNLOAD_NAME="${DOWNLOAD_NAME:-base-image}"
 
 HOSTNAME="${HOSTNAME:-cloud-vm}"
@@ -34,6 +34,7 @@ ENABLE_ROOT_SSH_PASSWORD_LOGIN="${ENABLE_ROOT_SSH_PASSWORD_LOGIN:-1}"
 FIRST_BOOT_SCRIPT="${FIRST_BOOT_SCRIPT:-}"  # Optional local script path, copied into image and run once.
 CUSTOM_SCRIPT="${CUSTOM_SCRIPT:-}"          # Optional local script path, run during image customization.
 SYSPREP="${SYSPREP:-0}"                     # Set to 1 to run virt-sysprep before output.
+LIBGUESTFS_BACKEND="${LIBGUESTFS_BACKEND:-direct}"
 
 RAW_IMAGE=""
 OUTPUT_IMAGE=""
@@ -295,6 +296,12 @@ resolve_paths() {
   RAW_IMAGE="${WORK_DIR}/${base_name}"
   OUTPUT_IMAGE="${OUTPUT_DIR}/${IMAGE_NAME}"
   MOTD_SNIPPET="${WORK_DIR}/99-image-build-motd"
+
+  case "$OUTPUT_IMAGE" in
+    /root/*)
+      log "warning: OUTPUT_IMAGE is under /root; libguestfs direct backend is enabled to avoid libvirt qemu permission errors"
+      ;;
+  esac
 }
 
 check_dependencies() {
@@ -468,6 +475,7 @@ show_config() {
   printf '  Build brand:   %s\n' "$BUILD_BRAND"
   printf '  Build time:    %s\n' "$BUILD_TIME_UTC"
   printf '  Root SSH pass: %s\n' "$ENABLE_ROOT_SSH_PASSWORD_LOGIN"
+  printf '  Guestfs:       %s\n' "$LIBGUESTFS_BACKEND"
   printf '\n'
 }
 
@@ -477,6 +485,7 @@ show_result() {
 }
 
 main() {
+  export LIBGUESTFS_BACKEND
   check_dependencies
   resolve_paths
   show_config
