@@ -27,7 +27,7 @@ HOSTNAME="${HOSTNAME:-cloud-vm}"
 TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-qemu-guest-agent,curl,wget,vim,htop,ca-certificates,cloud-init}"
 AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
-GUEST_APT_MIRROR="${GUEST_APT_MIRROR:-ustc}" # ustc, official, or none
+GUEST_APT_MIRROR="${GUEST_APT_MIRROR:-official}" # official, ustc, or none
 DEBIAN_APT_MIRROR="${DEBIAN_APT_MIRROR:-https://mirrors.ustc.edu.cn/debian}"
 DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-https://mirrors.ustc.edu.cn/debian-security}"
 UBUNTU_APT_MIRROR="${UBUNTU_APT_MIRROR:-https://mirrors.ustc.edu.cn/ubuntu}"
@@ -268,6 +268,7 @@ configure_interactively() {
   esac
 
   BUILD_BRAND="$(prompt_default "Build brand" "$BUILD_BRAND")"
+  GUEST_APT_MIRROR="$(select_from_array "Guest apt mirror" "official" "ustc" "none")"
   HOSTNAME="$(prompt_default "Default hostname" "$HOSTNAME")"
   TIMEZONE="$(prompt_default "Timezone" "$TIMEZONE")"
   OUTPUT_DIR="$(prompt_default "Output directory" "$OUTPUT_DIR")"
