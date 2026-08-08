@@ -50,16 +50,14 @@ MIRROR_NAMES=(
   "Debian USTC cloud latest"
   "Ubuntu official cloud current"
   "Ubuntu USTC cloud current"
-  "USTC debian-cdimage OpenStack"
   "Custom image URL"
 )
 
 MIRROR_URLS=(
   "https://cloud.debian.org/images/cloud"
-  "https://mirrors.ustc.edu.cn/debian-cloud/images/cloud"
+  "https://mirrors.ustc.edu.cn/debian-cdimage/cloud"
   "https://cloud-images.ubuntu.com"
   "https://mirrors.ustc.edu.cn/ubuntu-cloud-images"
-  "https://mirrors.ustc.edu.cn/debian-cdimage/openstack"
   ""
 )
 
@@ -173,55 +171,35 @@ select_from_array() {
   done
 }
 
-fetch_links() {
-  local url="$1"
-  curl -fsSL "$url" |
-    sed -nE 's/.*href="([^"#?]+)".*/\1/p' |
-    sed -E 's/&amp;/\&/g' |
-    awk '!seen[$0]++'
+# Directory listings are not fetched; image URLs are constructed directly
+# for amd64 from the well-known per-release layout.
+debian_image_url() {
+  local base="$1"
+  local release="$2"
+  local version
+
+  case "$release" in
+    trixie) version="13" ;;
+    bookworm) version="12" ;;
+    bullseye) version="11" ;;
+    *) die "unsupported Debian release: $release" ;;
+  esac
+
+  url_join "$base" "${release}/latest/debian-${version}-genericcloud-amd64.qcow2"
 }
 
-fetch_image_links() {
-  local url="$1"
-  fetch_links "$url" |
-    grep -E '\.(qcow2|img)(\.xz)?$' |
-    grep -Ev '(SHA|SUMS|manifest|json|torrent|zsync|vagrant|lxd|rootfs|kernel|initrd)' || true
-}
+ubuntu_image_url() {
+  local base="$1"
+  local release="$2"
 
-fetch_directory_links() {
-  local url="$1"
-  fetch_links "$url" |
-    grep '/$' |
-    grep -Ev '^(\.\./|daily/|current/|latest/)$' || true
-}
-
-filter_images_for_arch() {
-  local arch="$1"
-  grep -Ei "(${arch}|amd64|x86_64)" | grep -Ei '(generic|genericcloud|server|cloud|nocloud|openstack)' || true
-}
-
-choose_image_from_directory() {
-  local directory_url="$1"
-  local arch="${2:-amd64}"
-  local images
-
-  mapfile -t images < <(fetch_image_links "$directory_url" | filter_images_for_arch "$arch")
-  if (( ${#images[@]} == 0 )); then
-    mapfile -t images < <(fetch_image_links "$directory_url")
-  fi
-  (( ${#images[@]} > 0 )) || die "no qcow2/img images found at $directory_url"
-
-  local selected
-  selected="$(select_from_array "Available images from ${directory_url}" "${images[@]}")"
-  url_join "$directory_url" "$selected"
+  url_join "$base" "${release}/current/${release}-server-cloudimg-amd64.img"
 }
 
 choose_debian_release() {
   select_from_array "Debian release" \
     "trixie" \
     "bookworm" \
-    "bullseye" \
-    "sid"
+    "bullseye"
 }
 
 choose_ubuntu_release() {
@@ -239,27 +217,22 @@ configure_interactively() {
     "Debian official cloud latest")
       local release
       release="$(choose_debian_release)"
-      IMAGE_URL="$(choose_image_from_directory "$(url_join "${MIRROR_URLS[0]}" "${release}/latest")" "amd64")"
+      IMAGE_URL="$(debian_image_url "${MIRROR_URLS[0]}" "$release")"
       ;;
     "Debian USTC cloud latest")
       local release
       release="$(choose_debian_release)"
-      IMAGE_URL="$(choose_image_from_directory "$(url_join "${MIRROR_URLS[1]}" "${release}/latest")" "amd64")"
+      IMAGE_URL="$(debian_image_url "${MIRROR_URLS[1]}" "$release")"
       ;;
     "Ubuntu official cloud current")
       local release
       release="$(choose_ubuntu_release)"
-      IMAGE_URL="$(choose_image_from_directory "$(url_join "${MIRROR_URLS[2]}" "${release}/current")" "amd64")"
+      IMAGE_URL="$(ubuntu_image_url "${MIRROR_URLS[2]}" "$release")"
       ;;
     "Ubuntu USTC cloud current")
       local release
       release="$(choose_ubuntu_release)"
-      IMAGE_URL="$(choose_image_from_directory "$(url_join "${MIRROR_URLS[3]}" "${release}/current")" "amd64")"
-      ;;
-    "USTC debian-cdimage OpenStack")
-      local release
-      release="$(choose_debian_release)"
-      IMAGE_URL="$(choose_image_from_directory "$(url_join "${MIRROR_URLS[4]}" "${release}/latest")" "amd64")"
+      IMAGE_URL="$(ubuntu_image_url "${MIRROR_URLS[3]}" "$release")"
       ;;
     "Custom image URL")
       read -r -p "Image URL: " IMAGE_URL
