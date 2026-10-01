@@ -23,7 +23,7 @@ WORK_DIR="${WORK_DIR:-./work/qcow2-build}"
 OUTPUT_DIR="${OUTPUT_DIR:-/var/tmp/qcow2-build/dist}"
 DOWNLOAD_NAME="${DOWNLOAD_NAME:-base-image}"
 
-HOSTNAME="${HOSTNAME:-cloud-vm}"
+IMAGE_HOSTNAME="${IMAGE_HOSTNAME:-cloud-vm}"
 TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-qemu-guest-agent,curl,wget,vim,htop,ca-certificates,cloud-init}"
 AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
@@ -242,7 +242,7 @@ configure_interactively() {
 
   BUILD_BRAND="$(prompt_default "Build brand" "$BUILD_BRAND")"
   GUEST_APT_MIRROR="$(select_from_array "Guest apt mirror" "official" "ustc" "none")"
-  HOSTNAME="$(prompt_default "Default hostname" "$HOSTNAME")"
+  IMAGE_HOSTNAME="$(prompt_default "Default hostname" "$IMAGE_HOSTNAME")"
   TIMEZONE="$(prompt_default "Timezone" "$TIMEZONE")"
   OUTPUT_DIR="$(prompt_default "Output directory" "$OUTPUT_DIR")"
   IMAGE_NAME="$(prompt_default "Output image name" "$(default_image_name "$IMAGE_URL")")"
@@ -415,7 +415,7 @@ EOF
 customize_image() {
   local args=(
     -a "$OUTPUT_IMAGE"
-    --hostname "$HOSTNAME"
+    --hostname "$IMAGE_HOSTNAME"
     --timezone "$TIMEZONE"
     --run "$APT_MIRROR_SCRIPT"
     --install "$INSTALL_PACKAGES"
