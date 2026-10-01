@@ -357,21 +357,21 @@ EOF
 
 create_apt_mirror_script() {
   cat >"$APT_MIRROR_SCRIPT" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 mode="${GUEST_APT_MIRROR}"
 debian_mirror="${DEBIAN_APT_MIRROR}"
 debian_security_mirror="${DEBIAN_SECURITY_MIRROR}"
 ubuntu_mirror="${UBUNTU_APT_MIRROR}"
 
-[[ "\$mode" != "none" ]] || exit 0
-[[ -x /usr/bin/apt-get || -x /bin/apt-get ]] || exit 0
-[[ -r /etc/os-release ]] || exit 0
+[ "\$mode" != "none" ] || exit 0
+[ -x /usr/bin/apt-get ] || [ -x /bin/apt-get ] || exit 0
+[ -r /etc/os-release ] || exit 0
 
 . /etc/os-release
 codename="\${VERSION_CODENAME:-\${UBUNTU_CODENAME:-}}"
-[[ -n "\$codename" ]] || exit 0
+[ -n "\$codename" ] || exit 0
 
 mkdir -p /etc/apt/sources.list.d /etc/apt/sources.list.d.disabled
 find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*.list' -o -name '*.sources' \\) \\
@@ -379,7 +379,7 @@ find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*.list' -o -name '*.
 
 case "\${ID:-}" in
   debian)
-    if [[ "\$mode" == "official" ]]; then
+    if [ "\$mode" = "official" ]; then
       debian_mirror="https://deb.debian.org/debian"
       debian_security_mirror="https://deb.debian.org/debian-security"
     fi
@@ -391,7 +391,7 @@ deb \${debian_security_mirror} \${codename}-security main contrib non-free non-f
 APT
     ;;
   ubuntu)
-    if [[ "\$mode" == "official" ]]; then
+    if [ "\$mode" = "official" ]; then
       ubuntu_mirror="https://archive.ubuntu.com/ubuntu"
     fi
     cat >/etc/apt/sources.list <<APT
