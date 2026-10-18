@@ -10,8 +10,8 @@ set -Eeuo pipefail
 #   ./build-qcow2-image.sh
 #
 # Non-interactive example:
-#   IMAGE_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2" \
-#   IMAGE_NAME="debian-12-lightcone.qcow2" \
+#   IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2" \
+#   IMAGE_NAME="debian-13-lightcone.qcow2" \
 #   BUILD_BRAND="LightCone Cloud" \
 #   ./build-qcow2-image.sh
 
@@ -31,10 +31,13 @@ GUEST_APT_MIRROR="${GUEST_APT_MIRROR:-official}" # official, ustc, or none
 DEBIAN_APT_MIRROR="${DEBIAN_APT_MIRROR:-https://mirrors.ustc.edu.cn/debian}"
 DEBIAN_SECURITY_MIRROR="${DEBIAN_SECURITY_MIRROR:-https://mirrors.ustc.edu.cn/debian-security}"
 UBUNTU_APT_MIRROR="${UBUNTU_APT_MIRROR:-https://mirrors.ustc.edu.cn/ubuntu}"
+UBUNTU_SECURITY_MIRROR="${UBUNTU_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
+DEBIAN_IMAGE_TYPE="${DEBIAN_IMAGE_TYPE:-generic}" # generic (recommended for PVE/KVM) or genericcloud
 
 BUILD_BRAND="${BUILD_BRAND:-LightCone Cloud}"
 BUILD_TIME_UTC="${BUILD_TIME_UTC:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
 ENABLE_ROOT_SSH_PASSWORD_LOGIN="${ENABLE_ROOT_SSH_PASSWORD_LOGIN:-1}"
+ROOT_PASSWORD="${ROOT_PASSWORD:-}"
 FIRST_BOOT_SCRIPT="${FIRST_BOOT_SCRIPT:-}"  # Optional local script path, copied into image and run once.
 CUSTOM_SCRIPT="${CUSTOM_SCRIPT:-}"          # Optional local script path, run during image customization.
 SYSPREP="${SYSPREP:-0}"                     # Set to 1 to run virt-sysprep before output.
@@ -94,6 +97,9 @@ missing_runtime_commands() {
   has_cmd qemu-img || missing+=("qemu-img")
   has_cmd virt-customize || missing+=("virt-customize")
   has_cmd xz || missing+=("xz")
+  if [[ "${SYSPREP:-0}" == "1" ]] && ! has_cmd virt-sysprep; then
+    missing+=("virt-sysprep")
+  fi
   ((${#missing[@]} == 0)) || printf '%s\n' "${missing[@]}"
 }
 
@@ -116,7 +122,8 @@ install_dependencies() {
     run_as_root dnf install -y curl qemu-img libguestfs-tools-c xz
   elif has_cmd yum; then
     log "installing dependencies with yum"
-    run_as_root yum install -y curl qemu-img libguestfs-tools-c xz
+    run_as_root yum install -y curl qemu-img libguestfs-tools xz 2>/dev/null || \
+      run_as_root yum install -y curl qemu-img libguestfs-tools-c xz
   elif has_cmd zypper; then
     log "installing dependencies with zypper"
     run_as_root zypper --non-interactive install curl qemu-tools libguestfs-tools xz
@@ -125,6 +132,21 @@ install_dependencies() {
     run_as_root pacman -Sy --needed --noconfirm curl qemu-img libguestfs xz
   else
     die "unsupported builder OS (${os_id:-unknown}${os_like:+, like: $os_like}); install curl, qemu-img, virt-customize, and xz manually"
+  fi
+}
+
+check_builder_environment() {
+  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    local unreadable=0
+    for k in /boot/vmlinuz-*; do
+      if [[ -f "$k" && ! -r "$k" ]]; then
+        unreadable=1
+        break
+      fi
+    done
+    if [[ "$unreadable" -eq 1 ]]; then
+      log "warning: host kernel in /boot is not readable by non-root user. If virt-customize fails, execute: sudo chmod +r /boot/vmlinuz-*"
+    fi
   fi
 }
 
@@ -176,16 +198,20 @@ select_from_array() {
 debian_image_url() {
   local base="$1"
   local release="$2"
+  local type="${DEBIAN_IMAGE_TYPE:-generic}"
   local version
 
   case "$release" in
     trixie) version="13" ;;
     bookworm) version="12" ;;
-    bullseye) version="11" ;;
+    bullseye)
+      version="11"
+      type="genericcloud"
+      ;;
     *) die "unsupported Debian release: $release" ;;
   esac
 
-  url_join "$base" "${release}/latest/debian-${version}-genericcloud-amd64.qcow2"
+  url_join "$base" "${release}/latest/debian-${version}-${type}-amd64.qcow2"
 }
 
 ubuntu_image_url() {
@@ -300,6 +326,11 @@ check_dependencies() {
   need_cmd curl
   need_cmd qemu-img
   need_cmd virt-customize
+  if [[ "${SYSPREP:-0}" == "1" ]]; then
+    need_cmd virt-sysprep
+  fi
+
+  check_builder_environment
 }
 
 download_file() {
@@ -312,7 +343,19 @@ download_file() {
   fi
 
   log "downloading image: $url"
-  curl -fL --retry 5 --retry-delay 3 --connect-timeout 20 -o "${dest}.tmp" "$url"
+  if ! curl -fL --retry 5 --retry-delay 3 --connect-timeout 20 -o "${dest}.tmp" "$url"; then
+    if [[ "$url" =~ debian-[0-9]+-generic-amd64\.qcow2 ]]; then
+      local fallback_url="${url/-generic-amd64/-genericcloud-amd64}"
+      log "download failed, attempting fallback URL: $fallback_url"
+      curl -fL --retry 5 --retry-delay 3 --connect-timeout 20 -o "${dest}.tmp" "$fallback_url" || die "failed to download image from $url or $fallback_url"
+    elif [[ "$url" =~ debian-[0-9]+-genericcloud-amd64\.qcow2 ]]; then
+      local fallback_url="${url/-genericcloud-amd64/-generic-amd64}"
+      log "download failed, attempting fallback URL: $fallback_url"
+      curl -fL --retry 5 --retry-delay 3 --connect-timeout 20 -o "${dest}.tmp" "$fallback_url" || die "failed to download image from $url or $fallback_url"
+    else
+      die "failed to download image from $url"
+    fi
+  fi
   mv "${dest}.tmp" "$dest"
 }
 
@@ -364,6 +407,7 @@ mode="${GUEST_APT_MIRROR}"
 debian_mirror="${DEBIAN_APT_MIRROR}"
 debian_security_mirror="${DEBIAN_SECURITY_MIRROR}"
 ubuntu_mirror="${UBUNTU_APT_MIRROR}"
+ubuntu_sec_mirror="${UBUNTU_SECURITY_MIRROR}"
 
 [[ "\$mode" != "none" ]] || exit 0
 [[ -x /usr/bin/apt-get || -x /bin/apt-get ]] || exit 0
@@ -383,22 +427,30 @@ case "\${ID:-}" in
       debian_mirror="https://deb.debian.org/debian"
       debian_security_mirror="https://deb.debian.org/debian-security"
     fi
+    comps="main contrib non-free"
+    # non-free-firmware was introduced in Debian 12 (bookworm) and Debian 13 (trixie)
+    if [[ "\$codename" != "bullseye" && "\$codename" != "buster" ]]; then
+      comps="main contrib non-free non-free-firmware"
+    fi
     cat >/etc/apt/sources.list <<APT
-deb \${debian_mirror} \${codename} main contrib non-free non-free-firmware
-deb \${debian_mirror} \${codename}-updates main contrib non-free non-free-firmware
-deb \${debian_mirror} \${codename}-backports main contrib non-free non-free-firmware
-deb \${debian_security_mirror} \${codename}-security main contrib non-free non-free-firmware
+deb \${debian_mirror} \${codename} \${comps}
+deb \${debian_mirror} \${codename}-updates \${comps}
+deb \${debian_mirror} \${codename}-backports \${comps}
+deb \${debian_security_mirror} \${codename}-security \${comps}
 APT
     ;;
   ubuntu)
     if [[ "\$mode" == "official" ]]; then
-      ubuntu_mirror="https://archive.ubuntu.com/ubuntu"
+      ubuntu_mirror="http://archive.ubuntu.com/ubuntu"
+      ubuntu_sec_mirror="http://security.ubuntu.com/ubuntu"
+    else
+      ubuntu_sec_mirror="\${ubuntu_mirror}"
     fi
     cat >/etc/apt/sources.list <<APT
 deb \${ubuntu_mirror} \${codename} main restricted universe multiverse
 deb \${ubuntu_mirror} \${codename}-updates main restricted universe multiverse
 deb \${ubuntu_mirror} \${codename}-backports main restricted universe multiverse
-deb \${ubuntu_mirror} \${codename}-security main restricted universe multiverse
+deb \${ubuntu_sec_mirror} \${codename}-security main restricted universe multiverse
 APT
     ;;
   *)
@@ -421,17 +473,17 @@ customize_image() {
     --install "$INSTALL_PACKAGES"
     --run-command "systemctl enable qemu-guest-agent 2>/dev/null || true"
     --run-command "systemctl enable cloud-init 2>/dev/null || true"
-    --run-command "mkdir -p /opt/image-hooks /etc/ssh/sshd_config.d /etc/cloud/cloud.cfg.d"
+    --run-command "mkdir -p /opt/image-hooks /etc/ssh/sshd_config.d /etc/cloud/cloud.cfg.d /etc/sysctl.d /etc/modules-load.d /etc/security/limits.d"
     --copy-in "$MOTD_SNIPPET:/opt/image-hooks"
     --run-command "touch /etc/motd && printf '\n' >> /etc/motd && cat /opt/image-hooks/$(basename "$MOTD_SNIPPET") >> /etc/motd"
-    --write "/etc/sysctl.conf:fs.file-max = 6815744
+    --write "/etc/modules-load.d/bbr.conf:tcp_bbr
+"
+    --write "/etc/sysctl.d/99-cloud-tuning.conf:fs.file-max = 6815744
 net.ipv4.tcp_no_metrics_save = 1
 net.ipv4.tcp_ecn = 0
-net.ipv4.tcp_frto = 0
 net.ipv4.tcp_mtu_probing = 0
 net.ipv4.tcp_rfc1337 = 0
 net.ipv4.tcp_sack = 1
-net.ipv4.tcp_fack = 1
 net.ipv4.tcp_window_scaling = 1
 net.ipv4.tcp_adv_win_scale = 1
 net.ipv4.tcp_moderate_rcvbuf = 1
@@ -456,7 +508,9 @@ root soft nofile 1048576
 root hard nofile 1048576
 "
     --run-command "find /etc/ssh -maxdepth 2 -type f \\( -name 'sshd_config' -o -name '*.conf' \\) -exec sed -ri 's/^([[:space:]]*)(PermitRootLogin|PasswordAuthentication|KbdInteractiveAuthentication|ChallengeResponseAuthentication|UsePAM)[[:space:]]+/# \\1\\2 /' {} +"
-    --run-command "grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config.d/\\*.conf' /etc/ssh/sshd_config || printf '\nInclude /etc/ssh/sshd_config.d/*.conf\n' >> /etc/ssh/sshd_config"
+    --run-command "grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config.d/\\*.conf' /etc/ssh/sshd_config || sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config"
+    --run-command "truncate -s 0 /etc/machine-id 2>/dev/null || true"
+    --run-command "rm -f /var/lib/dbus/machine-id 2>/dev/null || true"
     --run-command "cloud-init clean --logs 2>/dev/null || true"
   )
 
@@ -464,11 +518,14 @@ root hard nofile 1048576
     args+=(
       --write "/etc/ssh/sshd_config.d/99-root-login.conf:PermitRootLogin yes
 PasswordAuthentication yes
-KbdInteractiveAuthentication yes
 UsePAM yes
 "
       --write "/etc/cloud/cloud.cfg.d/99-root-login.cfg:disable_root: false
 ssh_pwauth: true
+chpasswd:
+  expire: false
+apt:
+  preserve_sources_list: true
 "
     )
   else
@@ -478,8 +535,14 @@ PasswordAuthentication no
 "
       --write "/etc/cloud/cloud.cfg.d/99-root-login.cfg:disable_root: false
 ssh_pwauth: false
+apt:
+  preserve_sources_list: true
 "
     )
+  fi
+
+  if [[ -n "$ROOT_PASSWORD" ]]; then
+    args+=(--root-password "password:$ROOT_PASSWORD")
   fi
 
   if [[ -n "$CUSTOM_SCRIPT" ]]; then
