@@ -23,7 +23,7 @@ WORK_DIR="${WORK_DIR:-./work/qcow2-build}"
 OUTPUT_DIR="${OUTPUT_DIR:-/var/tmp/qcow2-build/dist}"
 DOWNLOAD_NAME="${DOWNLOAD_NAME:-base-image}"
 
-HOSTNAME="${HOSTNAME:-cloud-vm}"
+IMAGE_HOSTNAME="${IMAGE_HOSTNAME:-cloud-vm}"
 TIMEZONE="${TIMEZONE:-Asia/Shanghai}"
 INSTALL_PACKAGES="${INSTALL_PACKAGES:-qemu-guest-agent,curl,wget,vim,htop,ca-certificates,cloud-init}"
 AUTO_INSTALL_DEPS="${AUTO_INSTALL_DEPS:-1}"
@@ -242,7 +242,7 @@ configure_interactively() {
 
   BUILD_BRAND="$(prompt_default "Build brand" "$BUILD_BRAND")"
   GUEST_APT_MIRROR="$(select_from_array "Guest apt mirror" "official" "ustc" "none")"
-  HOSTNAME="$(prompt_default "Default hostname" "$HOSTNAME")"
+  IMAGE_HOSTNAME="$(prompt_default "Default hostname" "$IMAGE_HOSTNAME")"
   TIMEZONE="$(prompt_default "Timezone" "$TIMEZONE")"
   OUTPUT_DIR="$(prompt_default "Output directory" "$OUTPUT_DIR")"
   IMAGE_NAME="$(prompt_default "Output image name" "$(default_image_name "$IMAGE_URL")")"
@@ -357,21 +357,21 @@ EOF
 
 create_apt_mirror_script() {
   cat >"$APT_MIRROR_SCRIPT" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 mode="${GUEST_APT_MIRROR}"
 debian_mirror="${DEBIAN_APT_MIRROR}"
 debian_security_mirror="${DEBIAN_SECURITY_MIRROR}"
 ubuntu_mirror="${UBUNTU_APT_MIRROR}"
 
-[[ "\$mode" != "none" ]] || exit 0
-[[ -x /usr/bin/apt-get || -x /bin/apt-get ]] || exit 0
-[[ -r /etc/os-release ]] || exit 0
+[ "\$mode" != "none" ] || exit 0
+[ -x /usr/bin/apt-get ] || [ -x /bin/apt-get ] || exit 0
+[ -r /etc/os-release ] || exit 0
 
 . /etc/os-release
 codename="\${VERSION_CODENAME:-\${UBUNTU_CODENAME:-}}"
-[[ -n "\$codename" ]] || exit 0
+[ -n "\$codename" ] || exit 0
 
 mkdir -p /etc/apt/sources.list.d /etc/apt/sources.list.d.disabled
 find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*.list' -o -name '*.sources' \\) \\
@@ -379,7 +379,7 @@ find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*.list' -o -name '*.
 
 case "\${ID:-}" in
   debian)
-    if [[ "\$mode" == "official" ]]; then
+    if [ "\$mode" = "official" ]; then
       debian_mirror="https://deb.debian.org/debian"
       debian_security_mirror="https://deb.debian.org/debian-security"
     fi
@@ -391,7 +391,7 @@ deb \${debian_security_mirror} \${codename}-security main contrib non-free non-f
 APT
     ;;
   ubuntu)
-    if [[ "\$mode" == "official" ]]; then
+    if [ "\$mode" = "official" ]; then
       ubuntu_mirror="https://archive.ubuntu.com/ubuntu"
     fi
     cat >/etc/apt/sources.list <<APT
@@ -415,7 +415,7 @@ EOF
 customize_image() {
   local args=(
     -a "$OUTPUT_IMAGE"
-    --hostname "$HOSTNAME"
+    --hostname "$IMAGE_HOSTNAME"
     --timezone "$TIMEZONE"
     --run "$APT_MIRROR_SCRIPT"
     --install "$INSTALL_PACKAGES"
